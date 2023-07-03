@@ -16,5 +16,16 @@ notebooks/*.gif
 **.mp4
 **.avi
 
+# data related
+data/obama
+data/obama.zip
+
 # Model related
 pretrained_models
+
+# Enivironment related
+env
+**.pyc
+
+# IDE related
+.vscode

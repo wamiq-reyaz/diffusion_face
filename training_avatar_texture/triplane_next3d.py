@@ -167,9 +167,14 @@ class TriPlaneGenerator(torch.nn.Module):
         static_plane = self.backbone.synthesis(eg3d_ws, update_emas=update_emas, **synthesis_kwargs)
         static_plane = static_plane.view(len(static_plane), 3, 32, static_plane.shape[-2], static_plane.shape[-1])
         
+        # alpha_image = torch.cat(alpha_images, 1).unsqueeze(2)
+        # rendering_stitch = torch.cat((rendering_stitch, rendering_images[1], rendering_images[2]), 1)
+
         # blend features of neural texture and tri-plane
-        alpha_image = torch.cat(alpha_images, 1).unsqueeze(2)
-        rendering_stitch = torch.cat((rendering_stitch, rendering_images[1], rendering_images[2]), 1)
+        # fix from https://github.com/MrTornado24/Next3D/issues/7#issuecomment-1474619770
+        alpha_image = torch.cat((alpha_images[0], torch.zeros_like(alpha_images[0]), torch.zeros_like(alpha_images[0])), 1).unsqueeze(2)
+        rendering_stitch = torch.cat((rendering_stitch, torch.zeros_like(rendering_images[1]), torch.zeros_like(rendering_images[2])), 1)
+
         rendering_stitch = rendering_stitch.view(*static_plane.shape)
         blended_planes = rendering_stitch * alpha_image + static_plane * (1 - alpha_image)
 
@@ -185,7 +190,14 @@ class TriPlaneGenerator(torch.nn.Module):
         rgb_image = feature_image[:, :3]
         sr_image = self.superresolution(rgb_image, feature_image, eg3d_ws, noise_mode=self.rendering_kwargs['superresolution_noise_mode'], **{k:synthesis_kwargs[k] for k in synthesis_kwargs.keys() if k != 'noise_mode'})
 
-        return {'image': sr_image, 'image_raw': rgb_image, 'image_depth': depth_image}
+        return {'image': sr_image, 
+                'image_raw': rgb_image, 
+                'image_depth': depth_image, 
+                'blended_planes': blended_planes, 
+                'feature_image': feature_image,
+                'textures': textures,
+                'texture_ws': texture_ws,
+                'eg3d_ws': eg3d_ws}
 
     def rasterize(self, v, lms, textures, tforms, batch_size, device):
         rendering_images, alpha_images, uvcoords_images, transformed_lms = [], [], [], []

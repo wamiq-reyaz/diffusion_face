@@ -1,0 +1,20 @@
+# DECA related
+dataset_preprocessing/ffhq/deca/TestSamples
+dataset_preprocessing/ffhq/deca/data
+
+# Python related
+**/__pycache__
+
+# Output related
+notebooks/outputs
+
+notebooks/*.pt
+notebooks/*.npy
+notebooks/*.png
+notebooks/*.gif
+
+**.mp4
+**.avi
+
+# Model related
+pretrained_models

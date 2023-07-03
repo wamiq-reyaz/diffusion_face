@@ -20,6 +20,9 @@ from camera_utils import LookAtPoseSampler, FOV_to_intrinsics
 from training_avatar_texture.triplane_next3d import TriPlaneGenerator
 from torchvision.utils import save_image
 
+
+from gen_samples_next3d import PATTERN, w_plus_hook, set_replacement_hook, WS
+
 #----------------------------------------------------------------------------
 
 def parse_range(s: Union[str, List[int]]) -> List[int]:
@@ -161,6 +164,19 @@ def run_video_animation(drive_root, fname, network_pkl, grid_dims, seeds, outdir
             if fixed_camera:
                 camera_params = conditioning_params
             G.rendering_kwargs['return_normal'] = False
+            G.rendering_kwargs['depth_resolution_importance'] = 48
+            G.rendering_kwargs['depth_resolution'] = 48
+            
+            replacement = torch.load('/storage/nfs/wamiq/next3d/notebooks/000_simple_train_inversion4.pt')
+            stats = torch.load('./data/generated_samples/w_plus/stats/stats.pt')
+            _min = stats['min'].cuda()
+            _max = stats['max'].cuda()
+            _range = _max - _min
+            replacement = replacement[idx, :, 7:].permute(1,0).cuda()
+
+            replacement = (replacement * _range) + _min
+
+            all_hooks = set_replacement_hook(G, WS, replacement)
             img = G.synthesis(w, camera_params, v, noise_mode='const')['image'][0]
             imgs.append(img)
         

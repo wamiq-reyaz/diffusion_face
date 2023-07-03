@@ -14,10 +14,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--indir', type=str, required=True)
 args = parser.parse_args()
 
-# run mtcnn needed for Deep3DFaceRecon
-command = "python batch_mtcnn.py --in_root " + args.indir
-print(command)
-os.system(command)
+# # run mtcnn needed for Deep3DFaceRecon
+# command = "python batch_mtcnn.py --in_root " + args.indir
+# print(command)
+# os.system(command)
 
 out_folder = args.indir.split("/")[-2] if args.indir.endswith("/") else args.indir.split("/")[-1]
 

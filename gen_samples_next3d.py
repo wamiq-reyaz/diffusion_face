@@ -30,6 +30,117 @@ from torch_utils import misc
 from training_avatar_texture.triplane_next3d import TriPlaneGenerator
 
 
+from functools import partial
+ALL_DICT = dict()
+
+def w_plus_hook(name, module, args, output):
+    ALL_DICT[name] = output.clone().detach().cpu()
+
+    return torch.ones_like(output)
+
+def replace_hook(name, tensor, module, args, output):
+    tensor = tensor.to(output.device)
+    valid_len = output.shape[-1]
+    return tensor[..., :valid_len] # replace the output with tensor
+    
+
+import re
+PATTERN = r'.*block[0-9]+$'
+WS = ['texture_backbone.synthesis.b4.conv1.affine',
+ 'texture_backbone.synthesis.b4.torgb.affine',
+ 'texture_backbone.synthesis.b8.conv0.affine',
+ 'texture_backbone.synthesis.b8.conv1.affine',
+ 'texture_backbone.synthesis.b8.torgb.affine',
+ 'texture_backbone.synthesis.b16.conv0.affine',
+ 'texture_backbone.synthesis.b16.conv1.affine',
+ 'texture_backbone.synthesis.b16.torgb.affine',
+ 'texture_backbone.synthesis.b32.conv0.affine',
+ 'texture_backbone.synthesis.b32.conv1.affine',
+ 'texture_backbone.synthesis.b32.torgb.affine',
+ 'texture_backbone.synthesis.b64.conv0.affine',
+ 'texture_backbone.synthesis.b64.conv1.affine',
+ 'texture_backbone.synthesis.b64.torgb.affine',
+ 'texture_backbone.synthesis.b128.conv0.affine',
+ 'texture_backbone.synthesis.b128.conv1.affine',
+ 'texture_backbone.synthesis.b128.torgb.affine',
+ 'texture_backbone.synthesis.b256.conv0.affine',
+ 'texture_backbone.synthesis.b256.conv1.affine',
+ 'texture_backbone.synthesis.b256.torgb.affine',
+ 'mouth_backbone.synthesis.b8.conv0.affine',
+ 'mouth_backbone.synthesis.b8.conv1.affine',
+ 'mouth_backbone.synthesis.b8.torgb.affine',
+ 'mouth_backbone.synthesis.b16.conv0.affine',
+ 'mouth_backbone.synthesis.b16.conv1.affine',
+ 'mouth_backbone.synthesis.b16.torgb.affine',
+ 'mouth_backbone.synthesis.b32.conv0.affine',
+ 'mouth_backbone.synthesis.b32.conv1.affine',
+ 'mouth_backbone.synthesis.b32.torgb.affine',
+ 'mouth_backbone.synthesis.b64.conv0.affine',
+ 'mouth_backbone.synthesis.b64.conv1.affine',
+ 'mouth_backbone.synthesis.b64.torgb.affine',
+ 'mouth_backbone.synthesis.b128.conv0.affine',
+ 'mouth_backbone.synthesis.b128.conv1.affine',
+ 'mouth_backbone.synthesis.b128.torgb.affine',
+ 'mouth_backbone.synthesis.b256.conv0.affine',
+ 'mouth_backbone.synthesis.b256.conv1.affine',
+ 'mouth_backbone.synthesis.b256.torgb.affine',
+ 'neural_blending.synthesis.b64.conv0.affine',
+ 'neural_blending.synthesis.b64.conv1.affine',
+ 'neural_blending.synthesis.b64.torgb.affine',
+ 'neural_blending.synthesis.b128.conv0.affine',
+ 'neural_blending.synthesis.b128.conv1.affine',
+ 'neural_blending.synthesis.b128.torgb.affine',
+ 'neural_blending.synthesis.b256.conv0.affine',
+ 'neural_blending.synthesis.b256.conv1.affine',
+ 'neural_blending.synthesis.b256.torgb.affine',
+ 'backbone.synthesis.b4.conv1.affine',
+ 'backbone.synthesis.b4.torgb.affine',
+ 'backbone.synthesis.b8.conv0.affine',
+ 'backbone.synthesis.b8.conv1.affine',
+ 'backbone.synthesis.b8.torgb.affine',
+ 'backbone.synthesis.b16.conv0.affine',
+ 'backbone.synthesis.b16.conv1.affine',
+ 'backbone.synthesis.b16.torgb.affine',
+ 'backbone.synthesis.b32.conv0.affine',
+ 'backbone.synthesis.b32.conv1.affine',
+ 'backbone.synthesis.b32.torgb.affine',
+ 'backbone.synthesis.b64.conv0.affine',
+ 'backbone.synthesis.b64.conv1.affine',
+ 'backbone.synthesis.b64.torgb.affine',
+ 'backbone.synthesis.b128.conv0.affine',
+ 'backbone.synthesis.b128.conv1.affine',
+ 'backbone.synthesis.b128.torgb.affine',
+ 'backbone.synthesis.b256.conv0.affine',
+ 'backbone.synthesis.b256.conv1.affine',
+ 'backbone.synthesis.b256.torgb.affine',
+ 'superresolution.block0.conv0.affine',
+ 'superresolution.block0.conv1.affine',
+ 'superresolution.block0.torgb.affine',
+ 'superresolution.block1.conv0.affine',
+ 'superresolution.block1.conv1.affine',
+ 'superresolution.block1.torgb.affine']
+
+def set_fwd_hook(generator: torch.nn.Module) -> List:
+    all_hooks = []
+    for name, module in generator.named_modules():
+        if 'affine' in name and 'super' in name:
+            mod_hook = partial(w_plus_hook, name)
+            hook = module.register_forward_hook(mod_hook)
+            all_hooks.append(hook)
+    return all_hooks
+
+
+def set_replacement_hook(generator: torch.nn.Module, names, tensors) -> List:
+    all_hooks = []
+    for ii, name in enumerate(names):
+        for modname, module in generator.named_modules():
+            if modname == name:
+                mod_hook = partial(replace_hook, name, tensors[ii:ii+1, ...])
+                hook = module.register_forward_hook(mod_hook)
+                all_hooks.append(hook)
+    
+    return all_hooks
+
 #----------------------------------------------------------------------------
 
 def parse_range(s: Union[str, List]) -> List[int]:
@@ -181,29 +292,76 @@ def generate_images(
     # Generate images.
     for seed_idx, seed in enumerate(seeds):
         print('Generating image for seed %d (%d/%d) ...' % (seed, seed_idx, len(seeds)))
-        z = torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim)).to(device)
+        z = torch.from_numpy(np.random.RandomState(seed=seed).randn(1, G.z_dim)).to(device)
 
-        imgs = []
         angle_p = -0.2
-        for angle_y, angle_p in [(.4, angle_p), (0, angle_p), (-.4, angle_p)]:
-            cam_pivot = torch.tensor(G.rendering_kwargs.get('avg_camera_pivot', [0, 0, 0]), device=device)
-            cam_radius = G.rendering_kwargs.get('avg_camera_radius', 2.7)
-            
-            cam2world_pose = LookAtPoseSampler.sample(np.pi/2 + angle_y, np.pi/2 + angle_p, cam_pivot, radius=cam_radius, device=device)
+        for idx in range(25):
+            imgs = []
 
-            conditioning_cam2world_pose = LookAtPoseSampler.sample(np.pi/2, np.pi/2, cam_pivot, radius=cam_radius, device=device)
-            camera_params = torch.cat([cam2world_pose.reshape(-1, 16), intrinsics.reshape(-1, 9)], 1)
-            conditioning_params = torch.cat([conditioning_cam2world_pose.reshape(-1, 16), intrinsics.reshape(-1, 9)], 1)
-            
-            ws = G.mapping(z, conditioning_params, truncation_psi=truncation_psi, truncation_cutoff=truncation_cutoff)
+            for angle_y, angle_p in [(.4, angle_p), (0, angle_p), (-.4, angle_p)]:
+                cam_pivot = torch.tensor(G.rendering_kwargs.get('avg_camera_pivot', [0, 0, 0]), device=device)
+                cam_radius = G.rendering_kwargs.get('avg_camera_radius', 2.7)
+                
+                cam2world_pose = LookAtPoseSampler.sample(np.pi/2 + angle_y, np.pi/2 + angle_p, cam_pivot, radius=cam_radius, device=device)
 
-            img = G.synthesis(ws, camera_params, v, noise_mode='const')['image']
-            img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
-            imgs.append(img)
+                conditioning_cam2world_pose = LookAtPoseSampler.sample(np.pi/2, np.pi/2, cam_pivot, radius=cam_radius, device=device)
+                camera_params = torch.cat([cam2world_pose.reshape(-1, 16), intrinsics.reshape(-1, 9)], 1)
+                conditioning_params = torch.cat([conditioning_cam2world_pose.reshape(-1, 16), intrinsics.reshape(-1, 9)], 1)
+                
+                ws = G.mapping(z, conditioning_params, truncation_psi=truncation_psi, truncation_cutoff=truncation_cutoff)
 
-        img = torch.cat(imgs, dim=2)
+                # print(ws.shape)
 
-        PIL.Image.fromarray(img[0].cpu().numpy(), 'RGB').save(f'{outdir}/seed{seed:04d}.png')
+                #------------------------- z-norm
+                # with open('/storage/nfs/wamiq/next3d/data/generated_samples/attempt1/all_ws.pkl', 'rb') as fd:
+                    # import pickle
+                    # ws = pickle.load(fd)
+                    # print(ws.shape)
+                # from stats import mean, std
+                # chosen = np.load('notebooks/aa.npy')
+                # chosen = torch.from_numpy(chosen).view(1, 512).cuda()
+                # # chosen = (ws[42767:42768,0, ...]).cuda()# * torch.from_numpy(std[None, :]).cuda() )+ torch.from_numpy(mean[None, :]).cuda()
+                # print(chosen.min(), chosen.max())
+                # bb = chosen.unsqueeze(1).repeat_interleave(28, dim=1)
+                # print((ws-bb).sum(dim=-1))
+                # quit()
+
+                # -------------------- min-max 
+                # from stats import  _min, _max
+                # _range = _max - _min
+                # aa = torch.load('/storage/nfs/wamiq/next3d/min_max/sample-200.png')
+                # chosen = (aa[22:23,0, ...]).cuda()* torch.from_numpy(_range[None, :]).cuda() + torch.from_numpy(_min[None, :]).cuda()
+                # print(chosen.min(), chosen.max())
+                # ws = chosen.unsqueeze(1).repeat_interleave(28, dim=1)
+
+
+                # print(z.shape)
+                # quit()
+                replacement = torch.load('/storage/nfs/wamiq/next3d/min_max_73_conditional_img_noadd_64_no_norm/sample-49.png')
+                # replacement = torch.load('/storage/nfs/wamiq/next3d/min_max_73_segmap/sample-1.png')
+                # replacement = torch.load('/storage/nfs/wamiq/next3d/notebooks/000_simple_train_inversion5.pt')
+                stats = torch.load('./data/generated_samples/w_plus/stats/stats.pt')
+                _min = stats['min'].cuda()
+                _max = stats['max'].cuda()
+                _range = _max - _min
+                # replacement = replacement[idx, :, 6:-4].permute(1,0).cuda()
+                # print(replacement.shape)
+                replacement = replacement[idx, :, 7:].permute(1,0).cuda()
+                # replacement = (replacement + 1) / 2
+
+                replacement = (replacement * _range) + _min
+                replacement.requires_grad_(True)
+                # print(torch.min(replacement[1]), torch.max(replacement[1]))
+                # quit()
+                print(replacement.shape, ws.shape)
+                all_hooks = set_replacement_hook(G, WS, replacement)
+                img = G.synthesis(ws, camera_params, v, noise_mode='const')['image']
+                img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
+                imgs.append(img)
+
+            img = torch.cat(imgs, dim=2)
+
+            PIL.Image.fromarray(img[0].cpu().numpy(), 'RGB').save(f'{outdir}/000_rgb_train_inversion5_{str(idx).zfill(5)}_{seed:04d}.png')
 
         if shapes:
             # extract a shape.mrc with marching cubes. You can view the .mrc file using ChimeraX from UCSF.

@@ -19,6 +19,7 @@ notebooks/*.gif
 # data related
 data/obama
 data/obama.zip
+data/ffhq
 
 # Model related
 pretrained_models

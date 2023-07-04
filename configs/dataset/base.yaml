@@ -1,0 +1,16 @@
+# @package _group_
+
+path: ${env.datasets_dir}/${dataset.name}
+w_path: ${path}/ws
+img_path: ${path}/img_path
+stats_path: ${path}/stats_path
+base_seq_len: 73
+
+# Default parameters
+image_size: 256
+normalize_w: True
+normalize_image: True
+
+# When used with slurm, this will take the dataset from `path_for_slurm_job`
+# and will copy it into the `path` location
+path_for_slurm_job: ${env.datasets_dir}/${dataset.name}

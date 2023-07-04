@@ -337,24 +337,24 @@ def generate_images(
 
                 # print(z.shape)
                 # quit()
-                replacement = torch.load('/storage/nfs/wamiq/next3d/min_max_73_conditional_img_noadd_64_no_norm/sample-49.png')
-                # replacement = torch.load('/storage/nfs/wamiq/next3d/min_max_73_segmap/sample-1.png')
-                # replacement = torch.load('/storage/nfs/wamiq/next3d/notebooks/000_simple_train_inversion5.pt')
-                stats = torch.load('./data/generated_samples/w_plus/stats/stats.pt')
-                _min = stats['min'].cuda()
-                _max = stats['max'].cuda()
-                _range = _max - _min
-                # replacement = replacement[idx, :, 6:-4].permute(1,0).cuda()
-                # print(replacement.shape)
-                replacement = replacement[idx, :, 7:].permute(1,0).cuda()
-                # replacement = (replacement + 1) / 2
+                # replacement = torch.load('/storage/nfs/wamiq/next3d/min_max_73_conditional_img_noadd_64_no_norm/sample-49.png')
+                # # replacement = torch.load('/storage/nfs/wamiq/next3d/min_max_73_segmap/sample-1.png')
+                # # replacement = torch.load('/storage/nfs/wamiq/next3d/notebooks/000_simple_train_inversion5.pt')
+                # stats = torch.load('./data/generated_samples/w_plus/stats/stats.pt')
+                # _min = stats['min'].cuda()
+                # _max = stats['max'].cuda()
+                # _range = _max - _min
+                # # replacement = replacement[idx, :, 6:-4].permute(1,0).cuda()
+                # # print(replacement.shape)
+                # replacement = replacement[idx, :, 7:].permute(1,0).cuda()
+                # # replacement = (replacement + 1) / 2
 
-                replacement = (replacement * _range) + _min
-                replacement.requires_grad_(True)
+                # replacement = (replacement * _range) + _min
+                # replacement.requires_grad_(True)
                 # print(torch.min(replacement[1]), torch.max(replacement[1]))
                 # quit()
-                print(replacement.shape, ws.shape)
-                all_hooks = set_replacement_hook(G, WS, replacement)
+                # print(replacement.shape, ws.shape)
+                # all_hooks = set_replacement_hook(G, WS, replacement)
                 img = G.synthesis(ws, camera_params, v, noise_mode='const')['image']
                 img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
                 imgs.append(img)

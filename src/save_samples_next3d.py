@@ -41,7 +41,7 @@ PATTERN = r'.*block[0-9]+$'
 ALL_DICT = list()
 
 def w_plus_hook(name, module, args, output):
-    ALL_DICT.append((name, output.clone().detach().cpu()))
+    ALL_DICT.append((name, output.detach().cpu()))
     return None
 
 def set_fwd_hook(generator: torch.nn.Module) -> List:
@@ -143,6 +143,7 @@ def create_samples(N=256, voxel_origin=[0, 0, 0], cube_length=2.0):
 @click.option('--lms_cond', help='If condition 2d landmarks?', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
 @click.option('--reload_modules', help='Overload persistent modules?', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
 @click.option('--only_frontal', help='Only render from the frontal view, otherwise three side views', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
+@torch.no_grad()
 def generate_images(
     network_pkl: str,
     seeds: List[int],
@@ -207,20 +208,32 @@ def generate_images(
         lms = torch.from_numpy(lms).cuda().float().unsqueeze(0)
         v = torch.cat((v, lms), 1)
 
-    
+    v = v.repeat_interleave(16, dim=0)
+
 
     # Generate images.
     random.seed(seeds[0])
     seeds = []
-    for ii in range(100):
+    for ii in range(100000):
         seeds.append(random.randint(0, 2**32 - 1))
 
 
     all_ws = dict()
     with torch.no_grad():
+        all_seeds = []
+        all_zs = []
         for seed_idx, seed in tqdm(enumerate(seeds), total=len(seeds)):
-            # print('Generating image for seed %d (%d/%d) ...' % (seed, seed_idx, len(seeds)))
-            z = torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim)).to(device)
+            z = torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim))
+            all_seeds.append(seed)
+            all_zs.append(z)
+        
+        all_zs = torch.cat(all_zs, dim=0)
+        z_iterator = torch.split(all_zs, 16, dim=0)
+
+        for curr_idx, z in tqdm(enumerate(z_iterator), total=len(z_iterator)):
+            z = z.to(device)
+            start = curr_idx * 16
+            end = (curr_idx + 1) * 16
 
             angle_p = -0.2
             if only_frontal:
@@ -237,26 +250,41 @@ def generate_images(
                 conditioning_cam2world_pose = LookAtPoseSampler.sample(np.pi/2, np.pi/2, cam_pivot, radius=cam_radius, device=device)
                 camera_params = torch.cat([cam2world_pose.reshape(-1, 16), intrinsics.reshape(-1, 9)], 1)
                 conditioning_params = torch.cat([conditioning_cam2world_pose.reshape(-1, 16), intrinsics.reshape(-1, 9)], 1)
+                # print(z.shape, conditioning_params.shape)
+                # quit()
+                bs = z.shape[0]
+                conditioning_params = conditioning_params.repeat_interleave(bs, dim=0)
+                camera_params = camera_params.repeat_interleave(bs, dim=0)
                 ws = G.mapping(z, conditioning_params, truncation_psi=truncation_psi, truncation_cutoff=truncation_cutoff)
 
                 # clear the list before synthesising
                 global ALL_DICT
                 ALL_DICT = []
                 all_vals = G.synthesis(ws, camera_params, v, noise_mode='const')
+                # print(all_vals['image'].shape)
+                # quit()
 
                 # --------------------------------- Start saving ------------------------ #
                 img = all_vals['image']
                 img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
                 ALL_DICT.append(('img', img.clone().detach().cpu()))
 
-                PIL.Image.fromarray(img[0].cpu().numpy(), 'RGB').save(f'{outdir}/hires_img_{seed:04d}.png')
+                # PIL.Image.fromarray(img[0].cpu().numpy(), 'RGB').save(f'{outdir}/hires_img_{seed:04d}.png')
                 
-
-                all_ws[seed]= ALL_DICT
+                for ii in range(start, end):
+                    all_ws[all_seeds[ii]] = [(k[0], k[1][ii:11+1]) for k in ALL_DICT]
 
             if seed_idx % 5000 == 0:
                 with open(f'{outdir}/all_wpluss_{seed_idx}.pkl', 'wb') as fd:
                     pickle.dump(all_ws, fd)
+
+                # try removing the previous one to save on space
+                try:
+                    prev_multiplier = seed_idx // 5000
+                    prev_idx = (prev_multiplier - 1) * 5000
+                    os.remove(f'{outdir}/all_wpluss_{prev_idx}.pkl')
+                except Exception as e:
+                    print(e)
 
         with open(f'{outdir}/all_wpluss.pkl', 'wb') as fd:
             pickle.dump(all_ws, fd)

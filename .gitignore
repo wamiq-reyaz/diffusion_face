@@ -27,6 +27,7 @@ pretrained_models
 # Enivironment related
 env
 **.pyc
+.hydra
 
 # IDE related
 .vscode

@@ -23,7 +23,6 @@ sbatch_args:
   constraint: ${env.slurm_constraint}
   time: "1-0"
   gres: gpu:${num_gpus}
-  cpus-per-task: 5
   mem:
     _target_: src.infra.utils.num_gpus_to_mem
     num_gpus: ${num_gpus}

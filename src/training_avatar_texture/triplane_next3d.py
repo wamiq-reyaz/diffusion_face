@@ -88,7 +88,7 @@ class TriPlaneGenerator(torch.nn.Module):
         self.register_buffer('raw_uvcoords', uvcoords)
 
         # eye masks
-        mask = cv2.imread('data/ffhq/uv_face_eye_mask.png').astype(np.float32)/255.; mask = torch.from_numpy(mask[:,:,0])[None,None,:,:].contiguous()
+        mask = cv2.imread('../data/ffhq/uv_face_eye_mask.png').astype(np.float32)/255.; mask = torch.from_numpy(mask[:,:,0])[None,None,:,:].contiguous()
         self.uv_face_mask = F.interpolate(mask, [256, 256])
 
         # mouth mask

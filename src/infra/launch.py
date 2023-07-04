@@ -2,6 +2,8 @@
 Run a __reproducible__ experiment on __allocated__ resources
 It submits a slurm job(s) with the given hyperparams which will then execute `slurm_job.py`
 This is the main entry-point
+
+Copied from https://github.com/snap-research/3dgp/blob/main/src/infra/launch.py
 """
 
 import sys; sys.path.extend(['.', 'src'])

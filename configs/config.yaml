@@ -1,14 +1,14 @@
 defaults:
   - env/base.yaml
-  - env: local
+  - env: raven
 
   - model/base.yaml
-  - model: 3dgp
+  # - model: base
 
   - training/base.yaml
-  - training: patch_beta
+  - training: base
 
   - dataset/base.yaml
-  - dataset: imagenet
+  - dataset: w_plus_img
 
   - infra.yaml

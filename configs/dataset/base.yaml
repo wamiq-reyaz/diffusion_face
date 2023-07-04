@@ -1,9 +1,9 @@
 # @package _group_
 
 path: ${env.datasets_dir}/${dataset.name}
-w_path: ${path}/ws
-img_path: ${path}/img_path
-stats_path: ${path}/stats_path
+w_path: ${dataset.path}/ws
+img_path: ${dataset.path}/img_path
+stats_path: ${dataset.path}/stats_path
 base_seq_len: 73
 
 # Default parameters

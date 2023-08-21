@@ -1,4 +1,3 @@
-# @package _group_
 
 batch_size: 64 # Total batch size
 batch_gpu: null # Limit batch size per GPU

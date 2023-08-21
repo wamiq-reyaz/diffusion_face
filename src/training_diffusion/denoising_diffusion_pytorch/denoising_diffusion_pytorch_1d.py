@@ -30,7 +30,7 @@ from contextlib import nullcontext
 
 from tqdm.auto import tqdm
 
-from denoising_diffusion_pytorch.version import __version__
+from .version import __version__
 
 
 # new hook type

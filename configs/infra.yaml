@@ -1,5 +1,3 @@
-# @package _group_
-
 # Arguments that we want to pass via env into slurm job launcher
 env_args:
   project_dir: ${experiment_dir}
@@ -21,13 +19,14 @@ run_profiling: false
 
 sbatch_args:
   constraint: ${env.slurm_constraint}
-  time: "1-0"
+  time: "0-01:00:00"
   gres: gpu:${num_gpus}
   mem:
     _target_: src.infra.utils.num_gpus_to_mem
     num_gpus: ${num_gpus}
     mem_per_gpu: 64
   cpus-per-gpu: 5
+  reservation: "A100"
   comment: ${experiment_name}
 
 sbatch_args_str:

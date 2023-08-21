@@ -26,6 +26,7 @@ pretrained_models
 
 # Enivironment related
 env
+env2
 **.pyc
 .hydra
 

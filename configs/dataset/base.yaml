@@ -1,5 +1,3 @@
-# @package _group_
-
 path: ${env.datasets_dir}/${dataset.name}
 w_path: ${dataset.path}/ws
 img_path: ${dataset.path}/img_path

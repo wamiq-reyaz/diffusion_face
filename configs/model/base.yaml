@@ -1,3 +1,1 @@
-# @package _group_
-
 path: ${env.datasets_dir}/${dataset.name}

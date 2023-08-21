@@ -21,9 +21,9 @@ python_bin = os.getenv('python_bin')
 print('PROJECT DIR:', project_dir)
 print(f'SLURM_JOB_ID: {SLURM_JOB_ID}')
 print('HOSTNAME:', subprocess.run(['hostname'], stdout=subprocess.PIPE).stdout.decode('utf-8'))
-print(subprocess.run([os.path.join(os.path.dirname(python_bin), 'gpustat')], stdout=subprocess.PIPE).stdout.decode('utf-8'))
+# print(subprocess.run([os.path.join(os.path.dirname(python_bin), 'gpustat')], stdout=subprocess.PIPE).stdout.decode('utf-8'))
 
-@hydra.main(config_name=os.path.join(project_dir, 'experiment_config.yaml'))
+@hydra.main(config_path="../../", config_name='experiment_config.yaml', version_base="1.2")
 def main(cfg: DictConfig):
     os.chdir(project_dir)
 
@@ -33,8 +33,8 @@ def main(cfg: DictConfig):
     else:
         os.makedirs(target_data_dir_base, exist_ok=True)
 
-    copyfile(cfg.dataset.path_for_slurm_job, cfg.dataset.path)
-    print(f'Copied the data: {cfg.dataset.path_for_slurm_job} => {cfg.dataset.path}. Starting the training...')
+    # copyfile(cfg.dataset.path_for_slurm_job, cfg.dataset.path)
+    # print(f'Copied the data: {cfg.dataset.path_for_slurm_job} => {cfg.dataset.path}. Starting the training...')
 
     training_cmd = open('training_cmd.sh').read()
     print('<=== TRAINING COMMAND ===>')

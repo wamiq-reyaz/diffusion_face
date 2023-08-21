@@ -23,7 +23,7 @@ import types
 import io
 import pickle
 import re
-from pydantic import NoneStr
+# from pydantic import NoneStr
 import requests
 import html
 import hashlib

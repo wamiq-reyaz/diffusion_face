@@ -178,10 +178,13 @@ def generate_images(
     # Specify reload_modules=True if you want code modifications to take effect; otherwise uses pickled code
     if reload_modules:
         print("Reloading Modules!")
+        G._init_kwargs['topology_path'] = '../data/ffhq/head_template.obj'
+        print(G.init_kwargs)
         G_new = TriPlaneGenerator(*G.init_args, **G.init_kwargs).eval().requires_grad_(False).to(device)
         misc.copy_params_and_buffers(G, G_new, require_all=True)
         G_new.neural_rendering_resolution = G.neural_rendering_resolution
         G_new.rendering_kwargs = G.rendering_kwargs
+        G_new.topology_path = os.path.join('..', G.topology_path)
         G = G_new
 
     returned_wplus_hooks = set_fwd_hook(G)
@@ -272,16 +275,16 @@ def generate_images(
                 # PIL.Image.fromarray(img[0].cpu().numpy(), 'RGB').save(f'{outdir}/hires_img_{seed:04d}.png')
                 
                 for ii in range(start, end):
-                    all_ws[all_seeds[ii]] = [(k[0], k[1][ii:11+1]) for k in ALL_DICT]
+                    all_ws[all_seeds[ii]] = [(k[0], k[1][ii:ii+1]) for k in ALL_DICT]
 
-            if seed_idx % 5000 == 0:
-                with open(f'{outdir}/all_wpluss_{seed_idx}.pkl', 'wb') as fd:
+            if curr_idx % 1000 == 0:
+                with open(f'{outdir}/all_wpluss_{curr_idx}.pkl', 'wb') as fd:
                     pickle.dump(all_ws, fd)
 
                 # try removing the previous one to save on space
                 try:
-                    prev_multiplier = seed_idx // 5000
-                    prev_idx = (prev_multiplier - 1) * 5000
+                    prev_multiplier = curr_idx // 1000
+                    prev_idx = (prev_multiplier - 1) * 1000
                     os.remove(f'{outdir}/all_wpluss_{prev_idx}.pkl')
                 except Exception as e:
                     print(e)

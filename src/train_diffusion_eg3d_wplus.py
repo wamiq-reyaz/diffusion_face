@@ -2,7 +2,7 @@ import os
 import sys
 import pickle
 from typing import Any
-from denoising_diffusion_pytorch.denoising_diffusion_pytorch_1d import Trainer1D, GaussianDiffusion1D, Unet1D, TrainerPhotometric
+from training_diffusion.denoising_diffusion_pytorch.denoising_diffusion_pytorch_1d import Trainer1D, GaussianDiffusion1D, Unet1D, TrainerPhotometric
 
 import torch
 import torch.nn as nn

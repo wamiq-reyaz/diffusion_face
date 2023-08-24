@@ -226,7 +226,7 @@ class ImageReader_FFHQ:
     def __init__(self, path, image_size):
         self.path = path
         self.imagelist = os.listdir(path)
-        self.imagelist = sorted([path for path in self.imagelist if path.endswith('png')])
+        self.imagelist = sorted([path for path in self.imagelist if path.endswith('jpg')])
         self.num_frames = len(self.imagelist)
         self.frame_num = 0
         #self.height = height
@@ -264,6 +264,59 @@ class ImageReader_FFHQ:
             lms[idx, 1] = int(landmark.y * self.image_size)
         self.frame_num += 1
         return True, frame, lms, self.frame_num, self.imagelist[self.frame_num - 1]
+
+import torch
+class ImageReader_FFHQ_Dataset(torch.utils.data.Dataset):
+    def __init__(self, path, image_size):
+        self.path = path
+        self.imagelist = os.listdir(path)
+        self.imagelist = sorted([path for path in self.imagelist if path.endswith('jpg')])
+        self.num_frames = len(self.imagelist)
+        self.frame_num = 0
+        #self.height = height
+        #self.width = width
+        self.image_size = image_size
+        
+        # defaults are 0.5 and 0.5
+        self.face_tracker = mp.solutions.face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1, refine_landmarks=True, min_detection_confidence=0.1, min_tracking_confidence=0.1)
+        #self.tracker = Tracker(width, height, threshold=None, max_threads=1,
+        #                max_faces=1, discard_after=100, scan_every=300, 
+        #                silent=True, model_type=3, model_dir='third_libs/OpenSeeFace/models', no_gaze=True, detection_threshold=0.6, 
+        #                use_retinaface=1, max_feature_updates=900, static_model=False, try_hard=0)
+    
+    def __len__(self):
+        return self.num_frames
+
+    def __getitem__(self, idx):
+        if self.frame_num == self.num_frames:
+            print('Reach the end of the folder')
+            return False, True, [], [], []
+
+        frame = cv2.imread(os.path.join(self.path, self.imagelist[idx]), -1)[:, :, :3]
+        frame = frame[:, :, ::-1]
+        height, width = frame.shape[:2]
+        if height != self.image_size or width != self.image_size:
+            frame = cv2.resize(frame, (self.image_size, self.image_size))
+        #frame = np.concatenate([frame, frame[-176:]], axis=0)
+        
+        results = self.face_tracker.process(frame)
+        if results.multi_face_landmarks is None:
+            print('No face detected in ' + self.imagelist[idx])
+            frame = cv2.imread(os.path.join(self.path, self.imagelist[0]), -1)[:, :, :3]
+            results = self.face_tracker.process(frame)
+
+        if len(results.multi_face_landmarks) == 0:
+            print('No face detected in ' + self.imagelist[self.frame_num])
+            self.frame_num += 1
+            return False, False, [], [], []
+        lms = np.zeros((478, 2), dtype=np.int64)
+        for ii, landmark in enumerate(results.multi_face_landmarks[0].landmark):
+            #print(idx, landmark.x)
+            #if idx < 468:
+            lms[ii, 0] = int(landmark.x * self.image_size)
+            lms[ii, 1] = int(landmark.y * self.image_size)
+        self.frame_num += 1
+        return True, frame.copy(), lms, idx, self.imagelist[idx]
 
 
 class ImageReader:

@@ -13,13 +13,26 @@ notebooks/*.npy
 notebooks/*.png
 notebooks/*.gif
 
+playground/deca
+playground/outputs
+
+output/slurm
+
 **.mp4
 **.avi
+**.ipynb_checkpoints
+**.obj
+**.glb
+**.npy
+**.jpg
+**.pkl
+**.mtl
 
 # data related
 data/obama
 data/obama.zip
 data/ffhq
+
 
 # Model related
 pretrained_models

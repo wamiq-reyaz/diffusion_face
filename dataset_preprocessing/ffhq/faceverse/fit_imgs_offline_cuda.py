@@ -57,6 +57,7 @@ class Tracking(threading.Thread):
             # fitting using only landmarks
             for i in range(num_iters_rf):
                 pred_dict = self.fvm(self.fvm.get_packed_tensors(), render=False)
+                
                 lm_loss_val = losses.lm_loss(pred_dict['lms_proj'], lms, self.lm_weights, img_size=self.args.tar_size)
                 exp_reg_loss = losses.get_l2(self.fvm.exp_tensor)
                 id_reg_loss = losses.get_l2(self.fvm.id_tensor)

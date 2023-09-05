@@ -47,7 +47,8 @@ def video2sequence(video_path, sample_step=10):
     return imagepath_list
 
 class TestData(Dataset):
-    def __init__(self, testpath, iscrop=True, crop_size=224, scale=1.25, face_detector='fan', sample_step=10):
+    def __init__(self, testpath, iscrop=True, crop_size=224, scale=1.25, face_detector='fan', sample_step=10,
+                start=None, end=None):
         '''
             testpath: folder, imagepath_list, image path, video path
         '''
@@ -65,6 +66,8 @@ class TestData(Dataset):
             exit()
         # print('total {} images'.format(len(self.imagepath_list)))
         self.imagepath_list = sorted(self.imagepath_list)
+        if start is not None and end is not None:
+            self.imagepath_list = self.imagepath_list[start:end]
         self.crop_size = crop_size
         self.scale = scale
         self.iscrop = iscrop

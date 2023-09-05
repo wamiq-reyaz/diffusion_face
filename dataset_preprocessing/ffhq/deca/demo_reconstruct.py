@@ -38,7 +38,8 @@ def main(args):
     os.makedirs(savefolder, exist_ok=True)
 
     # load test images 
-    testdata = datasets.TestData(args.inputpath, iscrop=args.iscrop, face_detector=args.detector, sample_step=args.sample_step)
+    testdata = datasets.TestData(args.inputpath, iscrop=args.iscrop, face_detector=args.detector, sample_step=args.sample_step,
+                                start=args.start, end=args.end)
 
     # run DECA
     deca_cfg.model.use_tex = args.useTex
@@ -120,7 +121,7 @@ if __name__ == '__main__':
     parser.add_argument('--detector', default='fan', type=str,
                         help='detector for cropping face, check decalib/detectors.py for details' )
     # rendering option
-    parser.add_argument('--rasterizer_type', default='standard', type=str,
+    parser.add_argument('--rasterizer_type', default='pytorch3d', type=str,
                         help='rasterizer type: pytorch3d or standard' )
     parser.add_argument('--render_orig', default=False, type=lambda x: x.lower() in ['true', '1'],
                         help='whether to render results in original image size, currently only works when rasterizer_type=standard')
@@ -147,4 +148,10 @@ if __name__ == '__main__':
                         help='whether to save coeffs' )
     parser.add_argument('--load_eye_pose', default=False, type=lambda x: x.lower() in ['true', '1'],
                         help='whether to load eye pose parameters' )
+    parser.add_argument('--start', default=None, type=lambda x: int(x),
+                        help='start of the FFHQ indices' )
+    parser.add_argument('--end', default=None, type=lambda x: int(x),
+                        help='end of the FFHQ indices' )
+
+    args = parser.parse_args()
     main(parser.parse_args())

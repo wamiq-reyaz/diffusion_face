@@ -11,19 +11,30 @@
 """Generate images and shapes using pretrained network pickle."""
 
 import os
+import sys
+sys.path.append('../scripts')
 import re
 from typing import List, Optional, Tuple, Union
 
+import torch
+import torch.multiprocessing as mp
+if __name__ == '__main__':
+    print(mp.set_start_method('spawn'))
+import torch.distributed as dist
 import click
 import dnnlib
 import numpy as np
 import PIL.Image
-import torch
 from tqdm import tqdm
 import mrcfile
 import json
 import random
 import pickle
+from joblib import dump
+from PIL import Image
+import zarr
+from numcodecs import Blosc
+import tempfile
 
 
 import legacy
@@ -32,28 +43,17 @@ from torch_utils import misc
 from training_avatar_texture.triplane_next3d import TriPlaneGenerator
 from training_avatar_texture.networks_stylegan2_styleunet import SynthesisBlock as CondSynthesisBlock
 from training_avatar_texture.networks_stylegan2 import SynthesisBlock 
+from training.dataset import ImageFolderDataset
+from gen_samples_next3d import WS
 
+
+from torch.utils.data import DataLoader, DistributedSampler
+from itertools import cycle
 
 from functools import partial
 import re
 
-PATTERN = r'.*block[0-9]+$'
-ALL_DICT = list()
-
-def w_plus_hook(name, module, args, output):
-    ALL_DICT.append((name, output.detach().cpu()))
-    return None
-
-def set_fwd_hook(generator: torch.nn.Module) -> List:
-    all_hooks = []
-    for name, module in generator.named_modules():
-        if 'affine' in name:
-            mod_hook = partial(w_plus_hook, name)
-            hook = module.register_forward_hook(mod_hook)
-            all_hooks.append(hook)
-
-    return all_hooks
-
+from sample_diffusion import setup_generator
 
 #----------------------------------------------------------------------------
 
@@ -128,23 +128,242 @@ def create_samples(N=256, voxel_origin=[0, 0, 0], cube_length=2.0):
 
 #----------------------------------------------------------------------------
 
-@click.command()
-@click.option('--network', 'network_pkl', help='Network pickle filename', required=True)
-@click.option('--seeds', type=parse_range, help='List of random seeds (e.g., \'0,1,4-6\')', required=True)
-@click.option('--obj_path', type=str, help='Path of obj file', required=True)
-@click.option('--lms_path', type=str, help='Path of landmark file', required=True)
-@click.option('--trunc', 'truncation_psi', type=float, help='Truncation psi', default=1, show_default=True)
-@click.option('--trunc-cutoff', 'truncation_cutoff', type=int, help='Truncation cutoff', default=14, show_default=True)
-@click.option('--outdir', help='Where to save the output images', type=str, required=True, metavar='DIR')
-@click.option('--shapes', help='Export shapes as .mrc files viewable in ChimeraX', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
-@click.option('--shape-res', help='', type=int, required=False, metavar='int', default=512, show_default=True)
-@click.option('--fov-deg', help='Field of View of camera in degrees', type=int, required=False, metavar='float', default=18.837, show_default=True)
-@click.option('--shape-format', help='Shape Format', type=click.Choice(['.mrc', '.ply']), default='.mrc')
-@click.option('--lms_cond', help='If condition 2d landmarks?', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
-@click.option('--reload_modules', help='Overload persistent modules?', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
-@click.option('--only_frontal', help='Only render from the frontal view, otherwise three side views', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
-@torch.no_grad()
+def writer(pid, q):
+    try:
+        while True:
+            data = q.get()
+            idx = data['idx']
+            img = data['img']
+            _dir = data['dir']
+            if img is not None:
+                for ii, n in enumerate(idx):
+                        Image.fromarray(
+                                    img[ii], 'RGB').save(
+                                        os.path.join(_dir, f'{str(n).zfill(7)}.png'
+                                        )
+                                    )   
+            else:         
+                return
+    finally:
+        print(f'Writer {pid} done!')
+
+def proxy(rank, args):
+    kwargs = args
+    generate_images(rank, **kwargs)
+
 def generate_images(
+    rank: int,
+    queue: mp.Queue,
+    _array: zarr.Array,
+    temp_dir:str,
+    sample_cams: bool,
+    sample_ids:bool,
+    dataset_path: str,
+    mesh_path: str,
+    batch_size: int,
+    world_size: int,
+    network_pkl: str,
+    seeds: List[int], # These seeds are a fair bit different than the seeds in the main command
+    obj_path: str,
+    lms_path: str,
+    truncation_psi: float,
+    truncation_cutoff: int,
+    outdir: str,
+    shapes: bool,
+    shape_res: int,
+    fov_deg: float,
+    shape_format: str,
+    lms_cond: bool,
+    reload_modules: bool,
+    only_frontal: bool,
+    scale_lms:bool,
+    num_samples: int,
+    save_images: bool,
+    **kwargs
+):
+    # ----------------------------------------------------------------------------
+    # Initialize torch.distributed
+    # ----------------------------------------------------------------------------
+    init_file = os.path.abspath(os.path.join(temp_dir, '.torch_distributed_init'))
+    dist.init_process_group(backend='nccl', init_method=f'file://{init_file}', world_size=world_size, rank=rank)
+
+    # ----------------------------------------------------------------------------
+    # Setup
+    # ----------------------------------------------------------------------------
+    torch.cuda.set_device(rank)
+    torch.manual_seed(rank)
+    torch.cuda.manual_seed(rank)
+
+    # ----------------------------------------------------------------------------
+    # Setup the hooks
+    # ----------------------------------------------------------------------------
+    PATTERN = r'.*block[0-9]+$'
+    ALL_DICT = list()
+
+    def w_plus_hook(name, module, args, output):
+        ALL_DICT.append((name, output.clone().detach().cpu()))
+        return None
+
+    def set_fwd_hook(generator: torch.nn.Module) -> List:
+        all_hooks = []
+        for name, module in generator.named_modules():
+            if 'affine' in name:
+                mod_hook = partial(w_plus_hook, name)
+                hook = module.register_forward_hook(mod_hook)
+                all_hooks.append(hook)
+
+        return all_hooks
+
+    # ----------------------------------------------------------------------------
+    # Load networks 
+    # ----------------------------------------------------------------------------
+    G, conditioning_params, v = setup_generator(
+        network_pkl=network_pkl,
+        obj_path=obj_path,
+        lms_path=lms_path,
+        fov_deg=18.837,
+        device='cuda',
+        reload_modules=reload_modules,
+    )
+    conditioning_params_orig = conditioning_params.clone().cuda()
+    v_orig = v.clone().cuda()
+
+    for name, module in G.named_modules():
+        module.requires_grad_(False)
+
+    returned_wplus_hooks = set_fwd_hook(G)
+
+    print('Networks loaded and hooked')
+
+    # ----------------------------------------------------------------------------
+    # Create a dataset that iterates over different camera poses and vertices
+    # ----------------------------------------------------------------------------
+    if sample_cams or sample_ids:
+        dataset = ImageFolderDataset(path=dataset_path,
+                                    mesh_path=mesh_path,
+                                    mesh_type='.obj',
+                                    load_exp=True,
+                                    load_lms=True,
+                                    use_labels=True)
+        # Warning: We do not use the set_epoch function, 
+        # as we can live with the same ordering across epochs
+        sampler = DistributedSampler(dataset, shuffle=False)
+        dataloader = DataLoader(dataset, 
+                                    batch_size=batch_size,
+                                    shuffle=False,
+                                    num_workers=4,
+                                    sampler=sampler,
+                                    pin_memory=True)
+    else:
+        dataloader = (None, None, None)
+
+    print('Dataset created')
+    
+    # ----------------------------------------------------------------------------
+    # Slice the current portion of seeds
+    # ----------------------------------------------------------------------------
+    assert num_samples % world_size == 0
+    seeds = seeds[rank::world_size]
+    seed_idxes = np.arange(num_samples)[rank::world_size]
+
+    # ----------------------------------------------------------------------------
+    # Run the main loop
+    # ----------------------------------------------------------------------------
+    dloader_iterator = iter(cycle(dataloader))
+    all_ws = dict()
+    with torch.no_grad():
+        all_seeds = []
+        all_zs = []
+        for seed_idx, seed in tqdm(enumerate(seeds), total=len(seeds)):
+            z = torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim))
+            all_seeds.append(seed)
+            all_zs.append(z)
+        
+        all_zs = torch.cat(all_zs, dim=0).cuda()
+        z_iterator = torch.split(all_zs, batch_size, dim=0)
+
+        _iterator = tqdm(enumerate(z_iterator), total=len(z_iterator)) if rank == 0 else enumerate(z_iterator)
+        for curr_idx, z in _iterator:
+            z = z.cuda()
+            bs = z.shape[0]
+            start = curr_idx * bs
+            end = (curr_idx + 1) * bs
+            curr_seed_idxes = seed_idxes[start:end]
+
+            angle_p = -0.2
+            if only_frontal:
+                angles = [(0, angle_p)]
+            else:
+                angles = [(.4, angle_p), (0, angle_p), (-.4, angle_p)]
+
+            for angle_y, angle_p in angles:
+                # TODO: sample conditioning and camera parameters independently
+                if sample_cams or sample_ids:
+                    _, conditioning_params, v = next(dloader_iterator)
+                    _c = conditioning_params.cuda()
+                    _v = v.cuda()
+                if not sample_cams:
+                    _c = conditioning_params_orig.repeat_interleave(bs, dim=0)
+                if not sample_ids:
+                    _v = v_orig.repeat_interleave(bs, dim=0)
+
+                ws = G.mapping(z, _c, truncation_psi=truncation_psi, truncation_cutoff=truncation_cutoff)
+                # clear the list before synthesising
+                ALL_DICT = []
+                img = G.synthesis(ws, _c, _v, noise_mode='const')['image']
+
+                # ----------------------------------------------------------------------------
+                # Save the images
+                # ----------------------------------------------------------------------------
+                if save_images:
+                    img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
+                    img = img.clone().detach().cpu().numpy()
+                    queue.put({'idx': curr_seed_idxes,
+                               'img': img,
+                               'dir': os.path.join(outdir, 'images')
+                               })
+                
+                # ----------------------------------------------------------------------------
+                # Save the arrays
+                # ----------------------------------------------------------------------------
+                for k in ALL_DICT:
+                    valid_len = k[1].shape[-1]
+                    _array[k[0]]['data'][curr_seed_idxes, :valid_len] = k[1].numpy()
+
+            
+
+    print('Completed rank', rank)
+
+#----------------------------------------------------------------------------
+
+if __name__ == '__main__':
+    # ----------------------------------------------------------------------------
+    @click.command()
+    @click.option('--network', 'network_pkl', help='Network pickle filename', required=True)
+    @click.option('--seeds', type=parse_range, help='List of random seeds (e.g., \'0,1,4-6\')', required=True)
+    @click.option('--obj_path', type=str, help='Path of obj file', required=True)
+    @click.option('--lms_path', type=str, help='Path of landmark file', required=True)
+    @click.option('--dataset_path', type=str, help='Path of Image/Camera dataset', required=True)
+    @click.option('--mesh_path', type=str, help='Path of Mesh dataset', required=True)
+    @click.option('--trunc', 'truncation_psi', type=float, help='Truncation psi', default=1, show_default=True)
+    @click.option('--trunc-cutoff', 'truncation_cutoff', type=int, help='Truncation cutoff', default=14, show_default=True)
+    @click.option('--outdir', help='Where to save the output images', type=str, required=True, metavar='DIR')
+    @click.option('--shapes', help='Export shapes as .mrc files viewable in ChimeraX', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
+    @click.option('--shape-res', help='', type=int, required=False, metavar='int', default=512, show_default=True)
+    @click.option('--fov-deg', help='Field of View of camera in degrees', type=int, required=False, metavar='float', default=18.837, show_default=True)
+    @click.option('--shape-format', help='Shape Format', type=click.Choice(['.mrc', '.ply']), default='.mrc')
+    @click.option('--lms_cond', help='If condition 2d landmarks?', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
+    @click.option('--save_images', help='Whether to save the rendered images as well', type=bool, required=False, metavar='BOOL', default=True, show_default=True)
+    @click.option('--reload_modules', help='Overload persistent modules?', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
+    @click.option('--scale_lms', help='If 2d landmarks are from DECA', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
+    @click.option('--only_frontal', help='Only render from the frontal view, otherwise three side views', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
+    @click.option('--num_samples', help='Number of samples to generate', type=int, required=True, metavar='int', default=100000, show_default=True)
+    @click.option('--num_gpus', help='Number of GPUs', type=int, required=False, metavar='int', default=1, show_default=True)
+    @click.option('--num_writers', help='Number of concurrent writers', type=int, required=False, metavar='int', default=10, show_default=True)
+    @click.option('--sample_cams', help='Sample cameras from the dataset', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
+    @click.option('--sample_ids', help='Sample Ids from the dataset', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
+    @click.option('--batch_size', help='Batch size', type=int, required=False, metavar='int', default=32, show_default=True)
+    def main(
     network_pkl: str,
     seeds: List[int],
     obj_path: str,
@@ -158,185 +377,172 @@ def generate_images(
     shape_format: str,
     lms_cond: bool,
     reload_modules: bool,
-    only_frontal: bool
+    only_frontal: bool,
+    scale_lms:bool,
+    num_samples: int,
+    num_gpus: int,
+    num_writers: int,
+    sample_cams: bool,
+    sample_ids: bool,
+    dataset_path: str,
+    mesh_path: str,
+    save_images: bool,
+    batch_size: int
 ):
-    """Generate images using pretrained network pickle.
+        """Generate images using pretrained network pickle.
 
-    Examples:
+        Examples:
 
-    \b
-    # Generate an image using pre-trained FFHQ model.
-    python gen_samples.py --outdir=output --trunc=0.7 --seeds=0-5 --shapes=True\\
-        --network=ffhq-rebalanced-128.pkl
-    """
+        \b
+        # Generate an image using pre-trained FFHQ model.
+        python gen_samples.py --outdir=output --trunc=0.7 --seeds=0-5 --shapes=True\\
+            --network=ffhq-rebalanced-128.pkl
+        """
+        args = locals()
 
-    print('Loading networks from "%s"...' % network_pkl)
-    device = torch.device('cuda')
-    with dnnlib.util.open_url(network_pkl) as f:
-        G = legacy.load_network_pkl(f)['G_ema'].to(device) # type: ignore
+        # ----------------------------------------------------------------------------
+        # Setup
+        # ----------------------------------------------------------------------------
+        random.seed(seeds[0])
+        seeds = []
+        for ii in range(num_samples):
+            seeds.append(random.randint(0, 2**32 - 1))
+        args['seeds'] = seeds
 
-    # Specify reload_modules=True if you want code modifications to take effect; otherwise uses pickled code
-    if reload_modules:
-        print("Reloading Modules!")
-        G._init_kwargs['topology_path'] = '../data/ffhq/head_template.obj'
-        print(G.init_kwargs)
-        G_new = TriPlaneGenerator(*G.init_args, **G.init_kwargs).eval().requires_grad_(False).to(device)
-        misc.copy_params_and_buffers(G, G_new, require_all=True)
-        G_new.neural_rendering_resolution = G.neural_rendering_resolution
-        G_new.rendering_kwargs = G.rendering_kwargs
-        G_new.topology_path = os.path.join('..', G.topology_path)
-        G = G_new
+        # ----------------------------------------------------------------------------
+        # Create the output directory
+        # ----------------------------------------------------------------------------
+        os.makedirs(outdir, exist_ok=True)
+        if save_images:
+            os.makedirs(os.path.join(outdir, 'images'), exist_ok=True)
 
-    returned_wplus_hooks = set_fwd_hook(G)
+        # ----------------------------------------------------------------------------
+        # Run StyleGAN once to make sure the modules are loaded
+        # ----------------------------------------------------------------------------
+        G, c, v = setup_generator(
+            network_pkl=network_pkl,
+            obj_path=obj_path,
+            lms_path=lms_path,
+            fov_deg=18.837,
+            device='cuda',
+            reload_modules=False,
+        )
+        with torch.no_grad():
+            w = G.mapping(torch.randn(1, G.z_dim, device=c.device),
+                                c)
 
-    os.makedirs(outdir, exist_ok=True)
+            _ = G.synthesis(torch.randn_like(w, device=w.device), c=c, v=v, noise_mode='const')['image']
 
-    cam2world_pose = LookAtPoseSampler.sample(3.14/2, 3.14/2, torch.tensor([0, 0, 0.2], device=device), radius=2.7, device=device)
-    intrinsics = FOV_to_intrinsics(fov_deg, device=device)
-
-    # load fixed vertices
-    v = []
-    with open(obj_path, "r") as f:
-        while True:
-            line = f.readline()
-            if line == "":
-                break
-            if line[:2] == "v ":
-                v.append([float(x) for x in line.split()[1:]])
-    v = np.array(v).reshape((-1, 3))
-    v = torch.from_numpy(v).cuda().float().unsqueeze(0)
-
-    if lms_cond:
-        lms = np.loadtxt(lms_path)
-        lms = torch.from_numpy(lms).cuda().float().unsqueeze(0)
-        v = torch.cat((v, lms), 1)
-
-    v = v.repeat_interleave(16, dim=0)
+            del G, c, v, w
+            torch.cuda.empty_cache()
+            import gc
+            gc.collect()
+            torch.cuda.empty_cache()
 
 
-    # Generate images.
-    random.seed(seeds[0])
-    seeds = []
-    for ii in range(100000):
-        seeds.append(random.randint(0, 2**32 - 1))
 
+        # ----------------------------------------------------------------------------
+        # Create the zarr array
+        # ----------------------------------------------------------------------------
+        synchronizer = zarr.ProcessSynchronizer(os.path.join(outdir, 'samples.lock'))
+        store = zarr.DirectoryStore(os.path.join(outdir, 'samples.zarr'))
+        # TODO: make sure we have prompting available
+        main_group = zarr.group(store=store, overwrite=True)
+        subgroups = []
+        for w in WS:
+            subgroups.append(main_group.create_group(w))
 
-    all_ws = dict()
-    with torch.no_grad():
-        all_seeds = []
-        all_zs = []
-        for seed_idx, seed in tqdm(enumerate(seeds), total=len(seeds)):
-            z = torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim))
-            all_seeds.append(seed)
-            all_zs.append(z)
-        
-        all_zs = torch.cat(all_zs, dim=0)
-        z_iterator = torch.split(all_zs, 16, dim=0)
-
-        for curr_idx, z in tqdm(enumerate(z_iterator), total=len(z_iterator)):
-            z = z.to(device)
-            start = curr_idx * 16
-            end = (curr_idx + 1) * 16
-
-            angle_p = -0.2
-            if only_frontal:
-                angles = [(0, angle_p)]
-            else:
-                angles = [(.4, angle_p), (0, angle_p), (-.4, angle_p)]
-
-            for angle_y, angle_p in angles:
-                cam_pivot = torch.tensor(G.rendering_kwargs.get('avg_camera_pivot', [0, 0, 0]), device=device)
-                cam_radius = G.rendering_kwargs.get('avg_camera_radius', 2.7)
-                
-                cam2world_pose = LookAtPoseSampler.sample(np.pi/2 + angle_y, np.pi/2 + angle_p, cam_pivot, radius=cam_radius, device=device)
-
-                conditioning_cam2world_pose = LookAtPoseSampler.sample(np.pi/2, np.pi/2, cam_pivot, radius=cam_radius, device=device)
-                camera_params = torch.cat([cam2world_pose.reshape(-1, 16), intrinsics.reshape(-1, 9)], 1)
-                conditioning_params = torch.cat([conditioning_cam2world_pose.reshape(-1, 16), intrinsics.reshape(-1, 9)], 1)
-                # print(z.shape, conditioning_params.shape)
-                # quit()
-                bs = z.shape[0]
-                conditioning_params = conditioning_params.repeat_interleave(bs, dim=0)
-                camera_params = camera_params.repeat_interleave(bs, dim=0)
-                ws = G.mapping(z, conditioning_params, truncation_psi=truncation_psi, truncation_cutoff=truncation_cutoff)
-
-                # clear the list before synthesising
-                global ALL_DICT
-                ALL_DICT = []
-                all_vals = G.synthesis(ws, camera_params, v, noise_mode='const')
-                # print(all_vals['image'].shape)
-                # quit()
-
-                # --------------------------------- Start saving ------------------------ #
-                img = all_vals['image']
-                img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
-                ALL_DICT.append(('img', img.clone().detach().cpu()))
-
-                # PIL.Image.fromarray(img[0].cpu().numpy(), 'RGB').save(f'{outdir}/hires_img_{seed:04d}.png')
-                
-                for ii in range(start, end):
-                    all_ws[all_seeds[ii]] = [(k[0], k[1][ii:ii+1]) for k in ALL_DICT]
-
-            if curr_idx % 1000 == 0:
-                with open(f'{outdir}/all_wpluss_{curr_idx}.pkl', 'wb') as fd:
-                    pickle.dump(all_ws, fd)
-
-                # try removing the previous one to save on space
-                try:
-                    prev_multiplier = curr_idx // 1000
-                    prev_idx = (prev_multiplier - 1) * 1000
-                    os.remove(f'{outdir}/all_wpluss_{prev_idx}.pkl')
-                except Exception as e:
-                    print(e)
-
-        with open(f'{outdir}/all_wpluss.pkl', 'wb') as fd:
-            pickle.dump(all_ws, fd)
+        for sg in subgroups:
+            z = sg.ones(name='data', 
+                        compressor=Blosc(cname='zlib', clevel=0, shuffle=Blosc.SHUFFLE),
+                        shape=(num_samples, 512),
+                        chunks=(1024, 512),
+                        dtype='f4',
+                        overwrite=True,
+                        synchronizer=synchronizer)
             
+        args['_array'] = main_group
+        print(main_group[WS[0]]['data'].info)
+        print('Zarr array created')
+            
+        # ----------------------------------------------------------------------------
+        # Create the queue
+        # ----------------------------------------------------------------------------
+        queue = mp.Queue()
+        args['queue'] = queue
 
+        # ----------------------------------------------------------------------------
+        # Create the writers
+        # ----------------------------------------------------------------------------
+        writers = []
+        for ii in range(num_writers):
+            writers.append(mp.Process(target=writer, args=(ii, queue)))
+            writers[-1].start()
+        print('Writers started')
 
+        # ----------------------------------------------------------------------------
+        # Create the producder processes
+        # ----------------------------------------------------------------------------
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args['temp_dir'] = temp_dir
+            args['world_size'] = torch.cuda.device_count()
+            for k in args:
+                if k != 'seeds':
+                    print(k, args[k])
+            if args['world_size'] == 1:
+                print('Running on single GPU')
+                proxy(rank=0, args=(args, ))
+            else:
+                print(f'Running on {args["world_size"]} GPUs')
+                mp.spawn(fn=proxy, args=(args,), nprocs=args['world_size'], join=True)
 
-            # # ---------------------- Exploring the mapping of W-affine layers -------- #
-            # collected = []
-            # import re
+        # ----------------------------------------------------------------------------
+        # Kill the writers
+        # ----------------------------------------------------------------------------
+        print('Producer done, killing writers')
+        for ii in range(100*num_writers):
+            queue.put({'idx': None, 'img': None, 'dir': None})
+        for w in writers:
+            w.join()
+        print('Writers done')
 
-            # raw_expr = r'.*conv.*.affine'
-            # # expr = re.compile(raw_expr)
+        queue.close()
+        print('Queue closed')
 
-            # # print(G)
-            # # quit()
+        # ----------------------------------------------------------------------------
+        # Save the arguments
+        # ----------------------------------------------------------------------------
+        save_args = {k:v for k,v in args.items() if k != 'seeds'}
+        for k, v in save_args.items():
+            try:
+                v = str(v)
+                save_args[k] = v
+            except:
+                pass
+        with open(os.path.join(outdir, 'args.json'), 'w') as f:
+            json.dump(save_args, f)
 
-            # normal_blocks = []
-            # cond_blocks = []
-            # for n, m in G.named_modules():
-            #     if isinstance(m, SynthesisBlock):
-            #         normal_blocks.append((n, m))
-            #     if isinstance(m, CondSynthesisBlock):
-            #         cond_blocks.append((n, m))
-            #     # print(re.findall(raw_expr, n))
-            #     if len(re.findall(raw_expr, n)) > 0:
-            #         collected.append((n, m))
+        # ----------------------------------------------------------------------------
+        # Save the seeds
+        # ----------------------------------------------------------------------------
+        with open(os.path.join(outdir, 'seeds.pkl'), 'wb') as f:
+            pickle.dump(seeds, f)
 
-            # print('*'*10)
-            # for k, m in collected:
-            #     print(k, super(type(m)))
-            # print(len(k))
+        # ----------------------------------------------------------------------------
+        # Save the zarr array
+        # ----------------------------------------------------------------------------
+        main_group.attrs['seeds'] = seeds
+        main_group.attrs['num_samples'] = num_samples
+        main_group.attrs['num_writers'] = num_writers
+        main_group.attrs['num_gpus'] = num_gpus
 
-            # print('*'*10);
-            # for k, m in normal_blocks:
-            #     print(k)
-            # print(len(normal_blocks))
+        # ----------------------------------------------------------------------------
+        # End
+        # ----------------------------------------------------------------------------
+        print('Done')
 
-            # print('*'*10);
-            # print('cond blocks')
-            # for k, m in cond_blocks:
-            #     print(k)
-            # print(len(normal_blocks))
-            # quit()
+    # ----------------------------------------------------------------------------
 
-
-#----------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    generate_images() # pylint: disable=no-value-for-parameter
+    main() # pylint: disable=no-value-for-parameter
 
 #----------------------------------------------------------------------------

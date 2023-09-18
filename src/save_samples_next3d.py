@@ -491,7 +491,7 @@ if __name__ == '__main__':
                     print(k, args[k])
             if args['world_size'] == 1:
                 print('Running on single GPU')
-                proxy(rank=0, args=(args, ))
+                proxy(rank=0, args=args)
             else:
                 print(f'Running on {args["world_size"]} GPUs')
                 mp.spawn(fn=proxy, args=(args,), nprocs=args['world_size'], join=True)

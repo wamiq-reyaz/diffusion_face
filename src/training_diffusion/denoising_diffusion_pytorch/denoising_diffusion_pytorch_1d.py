@@ -396,10 +396,7 @@ class Unet1D(nn.Module):
 
     def forward(self, x, time, x_self_cond = None, condition=None):
         t = self.time_mlp(time)
-        if self.self_condition:
-            x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
-            x = torch.cat((x_self_cond, x), dim = 1)
-        
+       
         if self.is_conditional:
             len_added_tokens = condition.shape[-1]
             condition = condition * (t[:, :512, None] + 1)
@@ -461,6 +458,14 @@ class Unet1D(nn.Module):
             x = x[:, :, :-len_added_tokens] # remove the added tokens
 
         return x
+
+# ---------------------------------------------------------
+# Transformer model inspired by U-ViT
+# ---------------------------------------------------------
+# from ..models import UViT
+
+# ---------------------------------------------------------
+# ---------------------------------------------------------
 
 # gaussian diffusion trainer class
 
@@ -694,10 +699,12 @@ class GaussianDiffusion1D(nn.Module):
 
         x_start = None
 
-        for time, time_next in tqdm(time_pairs, desc = 'sampling loop time step'):
+        for time, time_next in time_pairs:
             time_cond = torch.full((batch,), time, device=device, dtype=torch.long)
             self_cond = x_start if self.self_condition else None
-            pred_noise, x_start, *_ = self.model_predictions(img, time_cond, self_cond, clip_x_start = clip_denoised, condition=condition)
+            # preds = self.model_predictions(x=x, t=t, x_self_cond=x_self_cond, condition=condition)
+
+            pred_noise, x_start, *_ = self.model_predictions(x=img, t=time_cond, x_self_cond=self_cond, clip_x_start = clip_denoised, condition=condition)
 
             if time_next < 0:
                 img = x_start
@@ -725,6 +732,8 @@ class GaussianDiffusion1D(nn.Module):
         # TODO: change ddim_sample as well
         if not (condition is None):
             added_seq_len = condition.shape[-1]
+        else:
+            added_seq_len = 0
 
         return sample_fn(shape=(batch_size, channels, seq_length-added_seq_len), condition=condition)
 
@@ -859,9 +868,11 @@ class GaussianDiffusion1D(nn.Module):
 
     # TODO: monkey patch forward based on the instantiation.
     def forward1(self, img, *args, **kwargs):
+        # print(img.shape)
         b, c, n, device, seq_length, = *img.shape, img.device, self.seq_length
         condition = kwargs.get('condition', None)
         len_condition = 0 if (condition is None) else condition.shape[-1]
+        # print(len_condition, n, seq_length)
         assert n + len_condition == seq_length, f'seq length must be {seq_length}'
         t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
 
@@ -941,19 +952,25 @@ class Trainer1D(object):
 
         # dataset and dataloader
 
-        dl = DataLoader(dataset, batch_size = train_batch_size, shuffle = True, pin_memory = True, num_workers = cpu_count()//8)
+        dl = DataLoader(dataset, batch_size = train_batch_size, shuffle = True, pin_memory = True, num_workers = 8, persistent_workers=True,
+                        prefetch_factor=5)
 
         dl = self.accelerator.prepare(dl)
         self.dl = cycle(dl)
 
-        # optimizer
-
-        self.opt = Adam(diffusion_model.parameters(), lr = train_lr, betas = adam_betas)
+        # optimizernormalize_con
+        param_groups = [{'params': self.model.parameters(),
+                         'lr': train_lr,
+                         'betas': adam_betas}]
         if self.conditional_lr:
-            self.opt_cond = Adam(self.conditional_model.parameters(), lr = self.conditional_lr, betas = adam_betas)
+            param_groups.append({'params': self.conditional_model.parameters(),
+                                    'lr': self.conditional_lr,
+                                    'betas': adam_betas})
         else:
-            self.opt_cond = None 
-        self.scheduler = OneCycleLR(self.opt, max_lr=train_lr, total_steps=self.train_num_steps,
+            pass
+        self.opt = Adam(params=param_groups)
+
+        self.scheduler = OneCycleLR(self.opt, max_lr=[k['lr'] for k in param_groups], total_steps=self.train_num_steps,
                                     pct_start=0.02, div_factor=25)
 
         # for logging results in a folder periodically
@@ -972,8 +989,9 @@ class Trainer1D(object):
         self.step = 0
 
         # prepare model, dataloader, optimizer with accelerator
-        models_list = [self.model, self.conditional_model] if self.conditional_model else [self.model]
-        self.model, self.conditional_model, self.opt, self.opt_cond, self.scheduler = self.accelerator.prepare(*models_list, self.opt, self.opt_cond, self.scheduler)
+        models_list = [self.model, self.conditional_model] #if self.conditional_model else [self.model]
+        # self.model, self.conditional_model, self.opt, self.opt_cond, self.scheduler = self.accelerator.prepare(*models_list, self.opt, self.opt_cond, self.scheduler)
+        self.model, self.conditional_model, self.opt, self.scheduler = self.accelerator.prepare(*models_list, self.opt, self.scheduler)
 
     @property
     def device(self):
@@ -986,9 +1004,9 @@ class Trainer1D(object):
         data = {
             'step': self.step,
             'model': self.accelerator.get_state_dict(self.model),
-            'cond_model': self.accelerator.get_state_dict(self.conditional_model),
+            'cond_model': self.accelerator.get_state_dict(self.conditional_model) if self.conditional_model else None,
             'opt': self.opt.state_dict(),
-            'opt_cond': self.opt_cond.state_dict(),
+            # 'opt_cond': self.opt_cond.state_dict() if self.conditional_model else None,
             'ema': self.ema.state_dict(),
             'scaler': self.accelerator.scaler.state_dict() if exists(self.accelerator.scaler) else None,
             'version': __version__
@@ -1082,7 +1100,6 @@ class Trainer1D(object):
                                 condition = self.conditional_model(condition).view(B, 512, -1) # BxExS
                                 
                                 if self.normalize_condition:
-                                    # condition = torch.special.expit(condition)
                                     condition = torch.tanh(condition)
 
                         loss = self.model(data, condition=condition)
@@ -1101,18 +1118,19 @@ class Trainer1D(object):
                 # print(self.conditional_model.module.conv1.weight.grad)
                 # quit()
 
+                accelerator.wait_for_everyone()
+
                 accelerator.clip_grad_norm_(self.model.parameters(), 1.0)
-                accelerator.clip_grad_norm_(self.conditional_model.parameters(), 1.0)
+                if self.conditional_model:
+                    accelerator.clip_grad_norm_(self.conditional_model.parameters(), 1.0)
 
                 pbar.set_description(f'loss: {total_loss:.4f}')
 
-                accelerator.wait_for_everyone()
-
                 self.opt.step()
                 self.opt.zero_grad()
-                if self.opt_cond:
-                    self.opt_cond.step()
-                    self.opt_cond.zero_grad()
+                # if self.opt_cond:
+                #     self.opt_cond.step()
+                #     self.opt_cond.zero_grad()
                 self.scheduler.step()
 
                 accelerator.wait_for_everyone()
@@ -1128,7 +1146,7 @@ class Trainer1D(object):
                         with torch.no_grad():
                             milestone = self.step // self.save_and_sample_every
                             batches = num_to_groups(self.num_samples, self.batch_size)
-                            all_samples_list = list(map(lambda n: self.ema.ema_model.sample(batch_size=n, condition=condition[:n]), batches))
+                            all_samples_list = list(map(lambda n: self.ema.ema_model.sample(batch_size=n, condition=None if (condition is None) else condition[:n]), batches))
                         #
                         all_samples = torch.cat(all_samples_list, dim = 0)
                         #
@@ -1340,42 +1358,42 @@ class TrainerPhotometric(object):
                                     condition = torch.special.expit(condition)
 
                         loss_diffusion, latents, loss_weight = self.model(data, condition=condition)
-                        # _min, _range and latents are of shape 1xExS
-                        latents = (latents  + 1 ) * 0.5 # normalize to 0, 1
-                        latents = (latents  * self._range.to(device)) + self._min.to(device) # min-max normalization
-                        latents = latents[..., 7:]
-                        latents = latents.permute(0, 2, 1) # BxSxE
-                        all_hooks = set_replacement_hook(generator=self.generator_model,
-                                                        names=WS,
-                                                        tensors=latents)
+                        # # _min, _range and latents are of shape 1xExS
+                        # latents = (latents  + 1 ) * 0.5 # normalize to 0, 1
+                        # latents = (latents  * self._range.to(device)) + self._min.to(device) # min-max normalization
+                        # latents = latents[..., 7:]
+                        # latents = latents.permute(0, 2, 1) # BxSxE
+                        # all_hooks = set_replacement_hook(generator=self.generator_model,
+                        #                                 names=WS,
+                        #                                 tensors=latents)
                         
-                        # create random ws for a pass 
-                        b = latents.shape[0]
-                        ws = torch.rand((b, 28, 512)).to(device)
-                        pred_img = self.generator_model.synthesis(ws,
-                                                             c=torch.repeat_interleave(input=self.camera_params, repeats=b, dim=0).to(device),
-                                                             v=torch.repeat_interleave(input=self.v, repeats=b, dim=0).to(device),
-                                                             noise_mode='const')['image']
-                        pred_img = torch.nn.functional.interpolate(pred_img,
-                                                                   size=256,
-                                                                   mode='bilinear',
-                                                                   align_corners=False)
-                        # normalization
-                        pred_img = (pred_img + 1) / 2.0
+                        # # create random ws for a pass 
+                        # b = latents.shape[0]
+                        # ws = torch.rand((b, 28, 512)).to(device)
+                        # pred_img = self.generator_model.synthesis(ws,
+                        #                                      c=torch.repeat_interleave(input=self.camera_params, repeats=b, dim=0).to(device),
+                        #                                      v=torch.repeat_interleave(input=self.v, repeats=b, dim=0).to(device),
+                        #                                      noise_mode='const')['image']
+                        # pred_img = torch.nn.functional.interpolate(pred_img,
+                        #                                            size=256,
+                        #                                            mode='bilinear',
+                        #                                            align_corners=False)
+                        # # normalization
+                        # pred_img = (pred_img + 1) / 2.0
 
-                        image = image * self.dataset_std.to(device)
-                        image = image + self.dataset_mean.to(device)
+                        # image = image * self.dataset_std.to(device)
+                        # image = image + self.dataset_mean.to(device)
 
-                        loss_photometric = self.photometric_weight * F.smooth_l1_loss(image, pred_img, reduction='none')
-                        loss_photometric = reduce(loss_photometric, 'b ... -> b (...)', 'mean' )
-                        loss_photometric = (loss_weight*loss_photometric).mean()
-                        loss = loss_diffusion + loss_photometric
+                        # loss_photometric = self.photometric_weight * F.smooth_l1_loss(image, pred_img, reduction='none')
+                        # loss_photometric = reduce(loss_photometric, 'b ... -> b (...)', 'mean' )
+                        # loss_photometric = (loss_weight*loss_photometric).mean()
+                        loss = loss_diffusion # + loss_photometric
 
 
                         # perform logging
                         if accelerator.is_main_process:
                             self.writer.add_scalar('loss_diffusion/train/', loss_diffusion.item(), self.step)
-                            self.writer.add_scalar('loss_photometric/train/', loss_photometric.item(), self.step)
+                            # self.writer.add_scalar('loss_photometric/train/', loss_photometric.item(), self.step)
                             self.writer.add_scalar('loss/train/', loss.item(), self.step)
                             self.writer.add_scalar('lr', self.scheduler.get_lr()[0], self.step)
 

@@ -263,8 +263,9 @@ def generate_images(
     # Slice the current portion of seeds
     # ----------------------------------------------------------------------------
     assert num_samples % world_size == 0
-    seeds = seeds[rank::world_size]
-    seed_idxes = np.arange(num_samples)[rank::world_size]
+    local_len = num_samples // world_size
+    seeds = seeds[rank*local_len:local_len*(rank+1)]
+    seed_idxes = np.arange(num_samples)[rank*local_len:local_len*(rank+1)]
 
     # ----------------------------------------------------------------------------
     # Run the main loop
@@ -274,7 +275,8 @@ def generate_images(
     with torch.no_grad():
         all_seeds = []
         all_zs = []
-        for seed_idx, seed in tqdm(enumerate(seeds), total=len(seeds)):
+        _iterator = tqdm(enumerate(seeds), total=len(seeds)) if rank == 0 else enumerate(seeds)
+        for seed_idx, seed in _iterator:
             z = torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim))
             all_seeds.append(seed)
             all_zs.append(z)
@@ -328,7 +330,9 @@ def generate_images(
                 # ----------------------------------------------------------------------------
                 for k in ALL_DICT:
                     valid_len = k[1].shape[-1]
-                    _array[k[0]]['data'][curr_seed_idxes, :valid_len] = k[1].numpy()
+                    data = np.ones((len(curr_seed_idxes), 512), dtype=np.float32)
+                    data[:, :valid_len] = k[1].numpy()
+                    _array[k[0]]['data'][curr_seed_idxes, :] = data
 
             
 
@@ -363,6 +367,7 @@ if __name__ == '__main__':
     @click.option('--sample_cams', help='Sample cameras from the dataset', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
     @click.option('--sample_ids', help='Sample Ids from the dataset', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
     @click.option('--batch_size', help='Batch size', type=int, required=False, metavar='int', default=32, show_default=True)
+    @click.option('--lmdb', help='Whether to use the lmdb backedn', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
     def main(
     network_pkl: str,
     seeds: List[int],
@@ -387,7 +392,8 @@ if __name__ == '__main__':
     dataset_path: str,
     mesh_path: str,
     save_images: bool,
-    batch_size: int
+    batch_size: int,
+    lmdb: bool,
 ):
         """Generate images using pretrained network pickle.
 
@@ -445,7 +451,9 @@ if __name__ == '__main__':
         # Create the zarr array
         # ----------------------------------------------------------------------------
         synchronizer = zarr.ProcessSynchronizer(os.path.join(outdir, 'samples.lock'))
-        store = zarr.DirectoryStore(os.path.join(outdir, 'samples.zarr'))
+        _store_path = 'samples.lmdb' if lmdb else 'samples.zarr'
+        store = zarr.LMDBStore(os.path.join(outdir, _store_path)) if lmdb else zarr.DirectoryStore(os.path.join(outdir, _store_path))
+        # store = zarr.DirectoryStore(os.path.join(outdir, _store_path))
         # TODO: make sure we have prompting available
         main_group = zarr.group(store=store, overwrite=True)
         subgroups = []
@@ -459,7 +467,10 @@ if __name__ == '__main__':
                         chunks=(1024, 512),
                         dtype='f4',
                         overwrite=True,
-                        synchronizer=synchronizer)
+                        synchronizer=synchronizer,
+                        write_empty_chunks=True)
+            # # fill in the chunks upfront
+            # z[:] = 1.0
             
         args['_array'] = main_group
         print(main_group[WS[0]]['data'].info)
@@ -535,6 +546,14 @@ if __name__ == '__main__':
         main_group.attrs['num_samples'] = num_samples
         main_group.attrs['num_writers'] = num_writers
         main_group.attrs['num_gpus'] = num_gpus
+
+        # ----------------------------------------------------------------------------
+        # Flush to disk
+        # ----------------------------------------------------------------------------
+        if lmdb:
+            store.flush()
+            store.close()
+        print('Store flushed to disk')
 
         # ----------------------------------------------------------------------------
         # End

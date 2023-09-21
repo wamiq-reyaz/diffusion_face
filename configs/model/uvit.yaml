@@ -1,0 +1,13 @@
+extras: 256 # the image features
+len_latents: 16 # the length of the latents
+embed_dim: 768
+depth: 12
+num_heads: 12
+mlp_ratio: 4.0
+qkv_bias: false
+qk_scale: null
+norm_layer: nn.LayerNorm 
+mlp_time_embed: true
+use_checkpoint: false
+skip: true
+scale_y: false

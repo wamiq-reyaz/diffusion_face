@@ -135,10 +135,24 @@ class PatchEmbed(nn.Module):
 
 
 class UViT(nn.Module):
-    def __init__(self, extras=256, len_latents=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4.,
-                 qkv_bias=False, qk_scale=None, norm_layer=nn.LayerNorm, mlp_time_embed=False,
-                 use_checkpoint=False, skip=True, scale_y=False):
+    def __init__(self,
+                cfg=None,
+                extras=256,
+                len_latents=16,
+                embed_dim=768,
+                depth=12,
+                num_heads=12,
+                mlp_ratio=4.,
+                qkv_bias=False,
+                qk_scale=None,
+                norm_layer=nn.LayerNorm,
+                mlp_time_embed=False,
+                use_checkpoint=False,
+                skip=True,
+                scale_y=False):
         super().__init__()
+        self.cfg = cfg
+
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
 
         len_latents = len_latents

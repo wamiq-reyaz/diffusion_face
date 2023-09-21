@@ -4,7 +4,7 @@ env_args:
   python_bin: ${env.python_bin}
   python_script: ${experiment_dir}/src/infra/slurm_job.py
 
-num_gpus: 4
+num_gpus: 1
 print_only: false
 slurm: false
 

@@ -3,12 +3,12 @@ defaults:
   - env: raven
 
   - model/base.yaml
-  # - model: base
+  - model: base
 
   - training/base.yaml
   - training: base
 
   - dataset/base.yaml
-  - dataset: w_plus_img
+  - dataset: base
 
   - infra.yaml

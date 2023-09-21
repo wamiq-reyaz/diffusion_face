@@ -1,1 +1,18 @@
 path: ${env.datasets_dir}/${dataset.name}
+dim: 512
+init_dim: null
+out_dim: 512
+dim_mults: (1,2,4)
+channels: 512
+self_condition: False
+resnet_block_groups: 8
+learned_variance: False
+learned_sinuosoidal_cond: False
+random_fourier_features: False
+learned_sinuosoidal_dim: 16
+
+
+is_conditional: true
+add_condition: false
+scale_condition: true
+

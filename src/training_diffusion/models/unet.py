@@ -6,7 +6,6 @@ from random import random
 from functools import partial
 from collections import namedtuple
 
-
 import numpy as np
 import torch
 from torch import nn, einsum
@@ -14,11 +13,6 @@ import torch.functional as F
 
 from einops import rearrange, reduce
 from einops.layers.torch import Rearrange
-
-
-# constants
-
-ModelPrediction =  namedtuple('ModelPrediction', ['pred_noise', 'pred_x_start'])
 
 # helpers functions
 
@@ -222,6 +216,7 @@ class Attention(nn.Module):
 class Unet1D(nn.Module):
     def __init__(
         self,
+        cfg,
         dim,
         init_dim = None,
         out_dim = None,
@@ -235,15 +230,17 @@ class Unet1D(nn.Module):
         learned_sinusoidal_dim = 16,
         is_conditional=False,
         add_condition=False,
+        scale_condition=False,
     ):
         super().__init__()
-
+        self.cfg = cfg
         # determine dimensions
 
         self.is_conditional = is_conditional
         self.add_condition = add_condition
         self.channels = channels
         self.self_condition = self_condition
+        self.scale_condition = scale_condition
         input_channels = channels * (2 if self_condition else 1)
 
         init_dim = default(init_dim, dim)
@@ -316,30 +313,15 @@ class Unet1D(nn.Module):
        
         if self.is_conditional:
             len_added_tokens = condition.shape[-1]
-            condition = condition * (t[:, :512, None] + 1)
-            condition = condition + t[:, 512:1024, None]
+            if self.scale_condition:
+                condition = condition * (t[:, :self.channels, None] + 1)
+                condition = condition + t[:, self.channels:2*self.channels, None]
             x = torch.cat([x, condition], dim=-1)
             if self.add_condition:
                 x = x + condition # assume dim 1
 
         x = self.init_conv(x)
         r = x.clone()
-
-
-        # if self.is_conditional:
-        #     len_added_tokens = condition.shape[-1]
-        #     # print(condition.shape)
-        #     # print(t.shape)
-        #     condition = condition * (t[:, :512, None] + 1)
-        #     condition = condition + t[:, 512:1024, None]
-        #     x = torch.cat([x, condition], dim=-1)
-        #     if self.add_condition:
-        #         x = x + condition # assume dim 1
-
-        # print(condition.shape)
-        # print(t.shape)
-        # quit()
-
 
         h = []
 

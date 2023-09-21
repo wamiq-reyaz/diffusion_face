@@ -1,0 +1,5 @@
+kind: adam
+lr: 1e-4
+betas: [0.9, 0.99]
+wd: 0.0
+eps: 1e-8

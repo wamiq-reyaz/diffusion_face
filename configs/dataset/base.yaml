@@ -1,13 +1,20 @@
 path: ${env.datasets_dir}/${dataset.name}
-w_path: ${dataset.path}/ws
-img_path: ${dataset.path}/img_path
-stats_path: ${dataset.path}/stats_path
+ws_path: ${dataset.path}/samples
+img_path: ${dataset.path}/images
+stats_path: ${dataset.path}/stats.pt
 base_seq_len: 73
+pad_left: 7
+pad_right: 0
 
 # Default parameters
 image_size: 256
 normalize_w: True
 normalize_image: True
+
+# TODO:
+# FFHQ parameters
+real_img_path: ${env.datasets_dir}/ffhq_512_posed_eg3d
+real_mesh_path: ${env.datasets_dir}/ffhq_512_posed_eg3d/deca_results_unposed
 
 # When used with slurm, this will take the dataset from `path_for_slurm_job`
 # and will copy it into the `path` location

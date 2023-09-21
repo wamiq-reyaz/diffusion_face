@@ -19,6 +19,23 @@ python gen_samples_next3d.py --trunc=0.7 --shapes=False --seeds=169 --network=..
 python save_samples_next3d.py --outdir=out --trunc=0.7 --shapes=False --seeds=169     --network=../pretrained_models/next3d_ffhq_512.pkl --obj_path=data/demo/demo.obj     --lms_path=data/demo/demo_kpt2d.txt --lms_cond=True --only_frontal=True --reload_modules=True --outdir=./data/generated_samples/w_plus_img
 
 python save_samples_next3d.py --outdir=out --trunc=0.7 --shapes=False --seeds=169     --network=../pretrained_models/next3d_ffhq_512.pkl --obj_path=data/demo/demo.obj     --lms_path=data/demo/demo_kpt2d.txt --lms_cond=True --only_frontal=True --reload_modules=True --outdir=/mnt/ibex_ai/Projects/diffusion/data/w_plus_img
+
+python save_samples_next3d.py --outdir=out --trunc=0.7 --shapes=False --seeds=169     \
+--network=../pretrained_models/next3d_ffhq_512.pkl \
+--obj_path=../data/demo/demo.obj    \
+--lms_path=../data/demo/demo_kpt2d.txt \
+--lms_cond=True --only_frontal=True --reload_modules=False \
+--outdir=/ibex/ai/home/parawr/Projects/diffusion/data/w_plus_img_cams_ids_0.7_500k_final \
+--scale_lms=False \
+--num_gpus 4 \
+--num_writers 10 \
+--batch_size 32 \
+--sample_cams True \
+--sample_ids True \
+--dataset_path /ibex/ai/home/parawr/Projects/diffusion/data/ffhq_512_posed_eg3d \
+--mesh_path /ibex/ai/home/parawr/Projects/diffusion/data/ffhq_512_posed_eg3d/deca_results_unposed \
+--num_samples 499712 \
+--lmdb True
 ```
 
 ### Reenactment

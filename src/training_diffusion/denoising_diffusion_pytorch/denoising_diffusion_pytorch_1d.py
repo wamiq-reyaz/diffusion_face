@@ -514,7 +514,7 @@ class GaussianDiffusion1D(nn.Module):
         return img
 
     # TODO: monkey patch forward based on the instantiation.
-    def forward1(self, img, *args, **kwargs):
+    def forward_wo_latents(self, img, *args, **kwargs):
         # print(img.shape)
         b, c, n, device, seq_length, = *img.shape, img.device, self.seq_length
         condition = kwargs.get('condition', None)
@@ -526,7 +526,7 @@ class GaussianDiffusion1D(nn.Module):
         img = self.normalize(img)
         return self.p_losses(img, t, *args, **kwargs)
 
-    def forward2(self, img, *args, **kwargs):
+    def forward_w_latents(self, img, *args, **kwargs):
         b, c, n, device, seq_length, = *img.shape, img.device, self.seq_length
         condition = kwargs.get('condition', None)
         len_condition = 0 if (condition is None) else condition.shape[-1]

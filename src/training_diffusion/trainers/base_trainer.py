@@ -2,6 +2,7 @@
 # email: wamiq.para@kaust.edu.sa
 
 import os
+import glob
 import uuid
 import warnings
 from datetime import datetime as dt
@@ -16,24 +17,31 @@ import torch.optim as optim
 import wandb
 from tqdm import tqdm
 
+from .. import colors, RunningAverageDict
 
-def is_rank_zero(args):
-    return args.rank == 0
+
+def is_rank_zero(rank):
+    return rank == 0
 
 
 class BaseTrainer:
-    def __init__(self, config, model, train_loader, test_loader=None, device=None):
+    def __init__(self,
+                 cfg,
+                 model_builder,
+                 rank):
         """ Base Trainer class for training a model."""
         
-        self.config = config
-        self.metric_criterion = "abs_rel"
+        self.cfg = cfg
+        self.rank = rank
+
         if device is None:
             device = torch.device(
                 'cuda') if torch.cuda.is_available() else torch.device('cpu')
         self.device = device
-        self.model = model
-        self.train_loader = train_loader
-        self.test_loader = test_loader
+        model_builder = model_builder
+        self.model = model_builder.get_model(cfg)
+        self.train_loader = model_builder.get_train_loader(cfg)
+        self.test_loader = model_builder.get_test_loader(cfg)
         self.optimizer = self.init_optimizer()
         self.scheduler = self.init_scheduler()
 
@@ -47,8 +55,6 @@ class BaseTrainer:
     def load_ckpt(self, checkpoint_dir="./checkpoints", ckpt_type="best"):
         import glob
         import os
-
-        from zoedepth.models.model_io import load_wts
 
         if hasattr(self.config, "checkpoint"):
             checkpoint = self.config.checkpoint
@@ -84,13 +90,20 @@ class BaseTrainer:
 
             params = m.get_lr_params(self.config.lr)
 
-        return optim.AdamW(params, lr=self.config.lr, weight_decay=self.config.wd)
+        return optim.AdamW(params, lr=self.cfg.optimizer.lr, weight_decay=self.config.wd)
 
     def init_scheduler(self):
         lrs = [l['lr'] for l in self.optimizer.param_groups]
-        return optim.lr_scheduler.OneCycleLR(self.optimizer, lrs, epochs=self.config.epochs, steps_per_epoch=len(self.train_loader),
-                                             cycle_momentum=self.config.cycle_momentum,
-                                             base_momentum=0.85, max_momentum=0.95, div_factor=self.config.div_factor, final_div_factor=self.config.final_div_factor, pct_start=self.config.pct_start, three_phase=self.config.three_phase)
+        return optim.lr_scheduler.OneCycleLR(self.optimizer,
+                                            max_lr=lrs,
+                                            total_steps=self.cfg.training.total_iter,
+                                            cycle_momentum=self.cfg.training.cycle_momentum,
+                                            base_momentum=0.85,
+                                            max_momentum=0.95,
+                                            div_factor=self.cfg.training.div_factor,
+                                            final_div_factor=self.cfg.training.final_div_factor,
+                                            pct_start=self.cfg.training.pct_start,
+                                            three_phase=self.cfg.training.three_phase)
 
     def train_on_batch(self, batch, train_step):
         raise NotImplementedError
@@ -103,90 +116,88 @@ class BaseTrainer:
             if torch.isnan(value):
                 raise ValueError(f"{key} is NaN, Stopping training")
 
-    @property
-    def iters_per_epoch(self):
-        return len(self.train_loader)
+    # @property
+    # def iters_per_epoch(self):
+    #     return len(self.train_loader)
 
     @property
-    def total_iters(self):
-        return self.config.epochs * self.iters_per_epoch
+    def total_iter(self):
+        return self.cfg.total_iter
 
     def should_early_stop(self):
         if self.config.get('early_stop', False) and self.step > self.config.early_stop:
             return True
 
     def train(self):
-        print(f"Training {self.config.name}")
-        if self.config.uid is None:
-            self.config.uid = str(uuid.uuid4()).split('-')[-1]
-        run_id = f"{dt.now().strftime('%d-%h_%H-%M')}-{self.config.uid}"
-        self.config.run_id = run_id
-        self.config.experiment_id = f"{self.config.name}{self.config.version_name}_{run_id}"
-        self.should_write = ((not self.config.distributed)
-                             or self.config.rank == 0)
+        if is_rank_zero(self.rank):
+            print('Training...')
+        if self.uid is None:
+            self.uid = str(uuid.uuid4()).split('-')[-1]
+        run_id = f"{dt.now().strftime('%Y-%m-%d__%H:%M:%S')}-{self.uid}"
+        self.run_id = run_id
+        experiment_dir = os.path.basename(self.cfg.experiment_dir)
+        self.experiment_id = f"{experiment_dir}_{run_id}"
+        self.should_write = (self.rank == 0)
         self.should_log = self.should_write  # and logging
         if self.should_log:
-            tags = self.config.tags.split(
-                ',') if self.config.tags != '' else None
-            wandb.init(project=self.config.project, name=self.config.experiment_id, config=flatten(self.config), dir=self.config.root,
-                       tags=tags, notes=self.config.notes, settings=wandb.Settings(start_method="fork"))
+            wandb.init(project=self.cfg.project, name=self.experiment_id, config=self.cfg, dir=self.cfg.experiment_dir,
+                       notes=self.cfg.notes, settings=wandb.Settings(start_method="fork"))
 
         self.model.train()
         self.step = 0
         best_loss = np.inf
-        validate_every = int(self.config.validate_every * self.iters_per_epoch)
+        validate_every = int(self.cfg.training.val_freq)
 
 
-        if self.config.prefetch:
-
-            for i, batch in tqdm(enumerate(self.train_loader), desc=f"Prefetching...",
-                                 total=self.iters_per_epoch) if is_rank_zero(self.config) else enumerate(self.train_loader):
-                pass
+        # if self.config.prefetch:
+        #     for i, batch in tqdm(enumerate(self.train_loader), desc=f"Prefetching...",
+        #                          total=self.iters_per_epoch) if is_rank_zero(self.rank) else enumerate(self.train_loader):
+        #         pass
 
         losses = {}
         def stringify_losses(L): return "; ".join(map(
             lambda kv: f"{colors.fg.purple}{kv[0]}{colors.reset}: {round(kv[1].item(),3):.4e}", L.items()))
         
-        for epoch in range(self.config.epochs):
+        for _iter in range(self.total_iter):
             if self.should_early_stop():
                 break
             
-            self.epoch = epoch
-            ################################# Train loop ##########################################################
-            if self.should_log:
-                wandb.log({"Epoch": epoch}, step=self.step)
-            pbar = tqdm(enumerate(self.train_loader), desc=f"Epoch: {epoch + 1}/{self.config.epochs}. Loop: Train",
-                        total=self.iters_per_epoch) if is_rank_zero(self.config) else enumerate(self.train_loader)
+            # ------------------------------------------------------------------------------------------------------
+            # Training loop
+            # ------------------------------------------------------------------------------------------------------
+            pbar = tqdm(enumerate(self.train_loader), desc=f"Iter: {_iter}/{self.total_iter}. Loop: Train",
+                        total=self.total_iter) if is_rank_zero(self.rank) else enumerate(self.train_loader)
             for i, batch in pbar:
                 if self.should_early_stop():
                     print("Early stopping")
                     break
-                # print(f"Batch {self.step+1} on rank {self.config.rank}")
+
                 losses = self.train_on_batch(batch, i)
-                # print(f"trained batch {self.step+1} on rank {self.config.rank}")
 
                 self.raise_if_nan(losses)
-                if is_rank_zero(self.config) and self.config.print_losses:
+                if is_rank_zero(self.rank):
                     pbar.set_description(
-                        f"Epoch: {epoch + 1}/{self.config.epochs}. Loop: Train. Losses: {stringify_losses(losses)}")
+                        f"Iter: {_iter}/{self.total_iter}. Loop: Train. Losses: {stringify_losses(losses)}")
                 self.scheduler.step()
 
-                if self.should_log and self.step % 50 == 0:
+                if self.should_log and _iter % 50 == 0:
                     wandb.log({f"Train/{name}": loss.item()
-                              for name, loss in losses.items()}, step=self.step)
+                              for name, loss in losses.items()}, step=_iter)
 
                 self.step += 1
 
-                ########################################################################################################
+                # ------------------------------------------------------------------------------------------------------
 
                 if self.test_loader:
-                    if (self.step % validate_every) == 0:
+                    if (self.step % self.cfg.training.val_freq) == 0:
                         self.model.eval()
                         if self.should_write:
                             self.save_checkpoint(
-                                f"{self.config.experiment_id}_latest.pt")
+                                f"{self.experiment_id}_latest.pt")
 
-                        ################################# Validation loop ##################################################
+                        # ------------------------------------------------------------------------------------------------------
+                        # Validation loop
+                        # ------------------------------------------------------------------------------------------------------
                         # validate on the entire validation set in every process but save only from rank 0, I know, inefficient, but avoids divergence of processes
                         metrics, test_losses = self.validate()
                         # print("Validated: {}".format(metrics))
@@ -199,25 +210,25 @@ class BaseTrainer:
 
                             if (metrics[self.metric_criterion] < best_loss) and self.should_write:
                                 self.save_checkpoint(
-                                    f"{self.config.experiment_id}_best.pt")
+                                    f"{self.experiment_id}_best.pt")
                                 best_loss = metrics[self.metric_criterion]
 
                         self.model.train()
 
                         if self.config.distributed:
                             dist.barrier()
-                        # print(f"Validated: {metrics} on device {self.config.rank}")
 
-                # print(f"Finished step {self.step} on device {self.config.rank}")
-                #################################################################################################
+                # ------------------------------------------------------------------------------------------------------
 
         # Save / validate at the end
         self.step += 1  # log as final point
         self.model.eval()
-        self.save_checkpoint(f"{self.config.experiment_id}_latest.pt")
+        self.save_checkpoint(f"{self.experiment_id}_latest.pt")
         if self.test_loader:
 
-            ################################# Validation loop ##################################################
+            # ------------------------------------------------------------------------------------------------------
+            # Validation loop at the end of training
+            # ------------------------------------------------------------------------------------------------------
             metrics, test_losses = self.validate()
             # print("Validated: {}".format(metrics))
             if self.should_log:
@@ -228,7 +239,7 @@ class BaseTrainer:
 
                 if (metrics[self.metric_criterion] < best_loss) and self.should_write:
                     self.save_checkpoint(
-                        f"{self.config.experiment_id}_best.pt")
+                        f"{self.experiment_id}_best.pt")
                     best_loss = metrics[self.metric_criterion]
 
         self.model.train()
@@ -237,7 +248,8 @@ class BaseTrainer:
         with torch.no_grad():
             losses_avg = RunningAverageDict()
             metrics_avg = RunningAverageDict()
-            for i, batch in tqdm(enumerate(self.test_loader), desc=f"Epoch: {self.epoch + 1}/{self.config.epochs}. Loop: Validation", total=len(self.test_loader), disable=not is_rank_zero(self.config)):
+            for i, batch in tqdm(enumerate(self.test_loader), 
+                                 desc=f"Iter: {self.step}/{self.total_iter}. Loop: Validation", total=len(self.test_loader), disable=not is_rank_zero(self.rank)):
                 metrics, losses = self.validate_on_batch(batch, val_step=i)
 
                 if losses:
@@ -250,54 +262,54 @@ class BaseTrainer:
     def save_checkpoint(self, filename):
         if not self.should_write:
             return
-        root = self.config.save_dir
+        root = self.save_dir
         if not os.path.isdir(root):
             os.makedirs(root)
 
         fpath = os.path.join(root, filename)
-        m = self.model.module if self.config.multigpu else self.model
+        m = self.model.module if self.cfg.num_gpus > 1 else self.model
         torch.save(
             {
                 "model": m.state_dict(),
-                "optimizer": None,  # TODO : Change to self.optimizer.state_dict() if resume support is needed, currently None to reduce file size
-                "epoch": self.epoch
+                "optimizer": self.optimizer.state_dict(),  # TODO : Change to self.optimizer.state_dict() if resume support is needed, currently None to reduce file size
+                "step": self.step
             }, fpath)
 
-    def log_images(self, rgb: Dict[str, list] = {}, depth: Dict[str, list] = {}, scalar_field: Dict[str, list] = {}, prefix="", scalar_cmap="jet", min_depth=None, max_depth=None):
-        if not self.should_log:
-            return
+    # def log_images(self, rgb: Dict[str, list] = {}, depth: Dict[str, list] = {}, scalar_field: Dict[str, list] = {}, prefix="", scalar_cmap="jet", min_depth=None, max_depth=None):
+    #     if not self.should_log:
+    #         return
 
-        if min_depth is None:
-            try:
-                min_depth = self.config.min_depth
-                max_depth = self.config.max_depth
-            except AttributeError:
-                min_depth = None
-                max_depth = None
+    #     if min_depth is None:
+    #         try:
+    #             min_depth = self.config.min_depth
+    #             max_depth = self.config.max_depth
+    #         except AttributeError:
+    #             min_depth = None
+    #             max_depth = None
 
-        depth = {k: colorize(v, vmin=min_depth, vmax=max_depth)
-                 for k, v in depth.items()}
-        scalar_field = {k: colorize(
-            v, vmin=None, vmax=None, cmap=scalar_cmap) for k, v in scalar_field.items()}
-        images = {**rgb, **depth, **scalar_field}
-        wimages = {
-            prefix+"Predictions": [wandb.Image(v, caption=k) for k, v in images.items()]}
-        wandb.log(wimages, step=self.step)
+    #     depth = {k: colorize(v, vmin=min_depth, vmax=max_depth)
+    #              for k, v in depth.items()}
+    #     scalar_field = {k: colorize(
+    #         v, vmin=None, vmax=None, cmap=scalar_cmap) for k, v in scalar_field.items()}
+    #     images = {**rgb, **depth, **scalar_field}
+    #     wimages = {
+    #         prefix+"Predictions": [wandb.Image(v, caption=k) for k, v in images.items()]}
+    #     wandb.log(wimages, step=self.step)
 
-    def log_line_plot(self, data):
-        if not self.should_log:
-            return
+    # def log_line_plot(self, data):
+    #     if not self.should_log:
+    #         return
 
-        plt.plot(data)
-        plt.ylabel("Scale factors")
-        wandb.log({"Scale factors": wandb.Image(plt)}, step=self.step)
-        plt.close()
+    #     plt.plot(data)
+    #     plt.ylabel("Scale factors")
+    #     wandb.log({"Scale factors": wandb.Image(plt)}, step=self.step)
+    #     plt.close()
 
-    def log_bar_plot(self, title, labels, values):
-        if not self.should_log:
-            return
+    # def log_bar_plot(self, title, labels, values):
+    #     if not self.should_log:
+    #         return
 
-        data = [[label, val] for (label, val) in zip(labels, values)]
-        table = wandb.Table(data=data, columns=["label", "value"])
-        wandb.log({title: wandb.plot.bar(table, "label",
-                  "value", title=title)}, step=self.step)
+    #     data = [[label, val] for (label, val) in zip(labels, values)]
+    #     table = wandb.Table(data=data, columns=["label", "value"])
+    #     wandb.log({title: wandb.plot.bar(table, "label",
+    #               "value", title=title)}, step=self.step)

@@ -6,6 +6,13 @@ test_batch_gpu: 64 # Batch size at test time
 # Additional training parameters.
 resume: latest # Resume from given network pickle
 
+# lr schedule
+cycle_momentum: true
+div_factor: 25.0 # default value
+final_div_factor: 1e4 # default value
+pct_start: 0.2 # default value
+three_phase: false # default value
+
 # Misc settings.
 desc: null # String to include in result dir name
 metrics: fid2k_full,nfs256 # Quality metrics

@@ -1,10 +1,9 @@
 path: ${env.datasets_dir}/${dataset.name}
-ws_path: ${dataset.path}/samples
+w_path: ${dataset.path}/samples
 img_path: ${dataset.path}/images
 stats_path: ${dataset.path}/stats.pt
 base_seq_len: 73
-pad_left: 7
-pad_right: 0
+padding: (7,0)
 
 # Default parameters
 image_size: 256

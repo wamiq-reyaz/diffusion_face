@@ -28,7 +28,7 @@ import numpy as np
 from pytorch_fid.inception import InceptionV3
 from pytorch_fid.fid_score import calculate_frechet_distance
 
-from denoising_diffusion_pytorch.version import __version__
+from diffusion.version import __version__
 
 # constants
 

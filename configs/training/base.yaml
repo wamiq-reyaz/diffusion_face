@@ -1,6 +1,6 @@
 
 per_gpu_batch_size: 64
-batch_size: ${ ${per_gpu_batch_size} * ${infra.num_gpus} } # Total batch size 
+batch_size: 64 # Total batch size  # TODO
 test_batch_gpu: 64 # Batch size at test time
 
 # Additional training parameters.

@@ -1,3 +1,4 @@
+name: w_plus_img_cams_ids_0.7_500k_final
 path: ${env.datasets_dir}/${dataset.name}
 w_path: ${dataset.path}/samples
 img_path: ${dataset.path}/images

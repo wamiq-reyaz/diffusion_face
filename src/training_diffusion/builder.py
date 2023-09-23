@@ -3,7 +3,7 @@ from omegaconf import DictConfig, OmegaConf
 
 import torch
 
-from denoising_diffusion_pytorch.builder import get_diffusion
+from diffusion.builder import get_diffusion
 from models.builder import get_model
 from datasets.builder import create_dataset
 from conditioners import get_conditioner

@@ -1,4 +1,4 @@
-path: ${env.datasets_dir}/${dataset.name}
+name: unet
 dim: 512
 init_dim: null
 out_dim: 512

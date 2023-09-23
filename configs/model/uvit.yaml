@@ -1,3 +1,4 @@
+name: uvit
 extras: 256 # the image features
 len_latents: 16 # the length of the latents
 embed_dim: 768

@@ -524,7 +524,7 @@ class GaussianDiffusion1D(nn.Module):
         t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
 
         img = self.normalize(img)
-        return self.p_losses(img, t, *args, **kwargs)
+        return {'diffusion_loss': self.p_losses(img, t, *args, **kwargs)}
 
     def forward_w_latents(self, img, *args, **kwargs):
         b, c, n, device, seq_length, = *img.shape, img.device, self.seq_length

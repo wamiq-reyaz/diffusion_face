@@ -1,5 +1,0 @@
-weights: ${env.project_path}/pretrained_models/next3d_ffhq_512.pkl
-reload_modules: False
-neural_rendering_resolution: 64
-rendering_kwargs_override: {}
-kwargs_override: {}

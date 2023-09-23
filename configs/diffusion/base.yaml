@@ -1,4 +1,3 @@
-path: ${env.datasets_dir}/${dataset.name}
 seq_length: 336
 timesteps: 1000
 sampling_timesteps: 100

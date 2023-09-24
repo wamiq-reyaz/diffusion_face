@@ -2,6 +2,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 
 import torch
+from itertools import cycle
 
 from .diffusion.builder import get_diffusion
 from .models.builder import get_model
@@ -27,13 +28,15 @@ class ModelBuilder:
                                                         num_workers=cfg.training.workers,
                                                         sampler=sampler,
                                                         pin_memory=True,
-                                                        shuffle=True,
+                                                        shuffle=False,
                                                         drop_last=True)
+        # Make infinite. WARNING: shuffle is performed only once
+        self.train_loader = cycle(self.train_loader)
 
         # Create a model
         model = get_model(cfg)
         diffusion = get_diffusion(cfg, model)
-        self.model = diffusion
+        self.model = diffusion.cuda()
         if cfg.num_gpus > 1:
             self.model = torch.nn.parallel.DistributedDataParallel(self.model,
                                                                    device_ids=[rank],
@@ -41,6 +44,8 @@ class ModelBuilder:
 
         # Create a conditioner
         self.conditioner = get_conditioner(cfg)
+        if self.conditioner:
+            self.conditioner = self.conditioner.cuda()
         if self.conditioner:
             if cfg.num_gpus > 1:
                 self.conditioner = torch.nn.parallel.DistributedDataParallel(self.conditioner,

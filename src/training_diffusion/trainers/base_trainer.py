@@ -146,7 +146,7 @@ class BaseTrainer:
         self.should_write = (self.rank == 0)
         self.should_log = self.should_write  # and logging
         # convert omegaconf to dict
-        cfg_to_log = OmegaConf.to_container(self.cfg)
+        cfg_to_log = OmegaConf.to_container(self.cfg, resolve=True)
         if self.should_log:
             wandb.init(project=self.cfg.project, name=self.experiment_id, config=cfg_to_log, dir=self.cfg.experiment_dir,
                        notes=self.cfg.notes, settings=wandb.Settings(start_method="fork"))
@@ -166,64 +166,65 @@ class BaseTrainer:
         def stringify_losses(L): return "; ".join(map(
             lambda kv: f"{colors.fg.purple}{kv[0]}{colors.reset}: {round(kv[1].item(),3):.4e}", L.items()))
         
-        for _iter in range(self.total_iter):
-            # if self.should_early_stop():
-            #     break
-            
+        _iterator = tqdm(range(self.total_iter),
+                        desc=f"Iter: 0/{self.total_iter}. Loop: Train") \
+                        if is_rank_zero(self.rank) \
+                        else range(self.total_iter)
+        dloader = self.train_loader
+        for _iter in _iterator:
             # ------------------------------------------------------------------------------------------------------
             # Training loop
             # ------------------------------------------------------------------------------------------------------
-            pbar = tqdm(enumerate(self.train_loader), desc=f"Iter: {_iter}/{self.total_iter}. Loop: Train",
-                        total=self.total_iter) if is_rank_zero(self.rank) else enumerate(self.train_loader)
-            for i, batch in pbar:
 
-                losses = self.train_on_batch(batch, i)
+            batch = next(dloader)
 
-                self.raise_if_nan(losses)
-                if is_rank_zero(self.rank):
-                    pbar.set_description(
-                        f"Iter: {_iter}/{self.total_iter}. Loop: Train. Losses: {stringify_losses(losses)}")
-                self.scheduler.step()
+            losses = self.train_on_batch(batch, _iter)
 
-                if self.should_log and _iter % 50 == 0:
-                    wandb.log({f"Train/{name}": loss.item()
-                              for name, loss in losses.items()}, step=_iter)
+            self.raise_if_nan(losses)
+            if is_rank_zero(self.rank):
+                _iterator.set_description(
+                    f"Iter: {_iter}/{self.total_iter}. Loop: Train. Losses: {stringify_losses(losses)}")
+            self.scheduler.step()
 
-                self.step += 1
+            if self.should_log and self.step % 50 == 0:
+                wandb.log({f"Train/{name}": loss.item()
+                            for name, loss in losses.items()}, step=self.step)
 
-                # ------------------------------------------------------------------------------------------------------
+            self.step += 1
 
-                if self.test_loader:
-                    if (self.step % self.cfg.training.val_freq) == 0:
-                        self.model.eval()
-                        if self.should_write:
+            # ------------------------------------------------------------------------------------------------------
+
+            if self.test_loader:
+                if (self.step % self.cfg.training.val_freq) == 0:
+                    self.model.eval()
+                    if self.should_write:
+                        self.save_checkpoint(
+                            f"{self.experiment_id}_latest.pt")
+
+                    # ------------------------------------------------------------------------------------------------------
+                    # Validation loop
+                    # ------------------------------------------------------------------------------------------------------
+                    # validate on the entire validation set in every process but save only from rank 0, I know, inefficient, but avoids divergence of processes
+                    metrics, test_losses = self.validate()
+                    # print("Validated: {}".format(metrics))
+                    if self.should_log:
+                        wandb.log(
+                            {f"Test/{name}": tloss for name, tloss in test_losses.items()}, step=self.step)
+
+                        wandb.log({f"Metrics/{k}": v for k,
+                                    v in metrics.items()}, step=self.step)
+
+                        if (metrics[self.metric_criterion] < best_loss) and self.should_write:
                             self.save_checkpoint(
-                                f"{self.experiment_id}_latest.pt")
+                                f"{self.experiment_id}_best.pt")
+                            best_loss = metrics[self.metric_criterion]
 
-                        # ------------------------------------------------------------------------------------------------------
-                        # Validation loop
-                        # ------------------------------------------------------------------------------------------------------
-                        # validate on the entire validation set in every process but save only from rank 0, I know, inefficient, but avoids divergence of processes
-                        metrics, test_losses = self.validate()
-                        # print("Validated: {}".format(metrics))
-                        if self.should_log:
-                            wandb.log(
-                                {f"Test/{name}": tloss for name, tloss in test_losses.items()}, step=self.step)
+                    self.model.train()
 
-                            wandb.log({f"Metrics/{k}": v for k,
-                                      v in metrics.items()}, step=self.step)
+                    if self.cfg.num_gpus > 1:
+                        dist.barrier()
 
-                            if (metrics[self.metric_criterion] < best_loss) and self.should_write:
-                                self.save_checkpoint(
-                                    f"{self.experiment_id}_best.pt")
-                                best_loss = metrics[self.metric_criterion]
-
-                        self.model.train()
-
-                        if self.cfg.num_gpus > 1:
-                            dist.barrier()
-
-                # ------------------------------------------------------------------------------------------------------
+            # ------------------------------------------------------------------------------------------------------
 
         # Save / validate at the end
         self.step += 1  # log as final point

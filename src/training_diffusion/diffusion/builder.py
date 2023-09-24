@@ -1,11 +1,11 @@
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
-from denoising_diffusion_pytorch_1d import DenoisingDiffusion1D
+from .denoising_diffusion_pytorch_1d import GaussianDiffusion1D
 
 
 def get_diffusion(cfg: DictConfig, model):
-    diffusion = DenoisingDiffusion1D(
+    _diffusion = GaussianDiffusion1D(
         model=model,
         seq_length=cfg.diffusion.seq_length,
         timesteps=cfg.diffusion.timesteps,
@@ -21,8 +21,8 @@ def get_diffusion(cfg: DictConfig, model):
     )
 
     if cfg.diffusion.return_latents:
-        diffusion.forward = diffusion.forward_w_latents
+        _diffusion.forward = _diffusion.forward_w_latents
     else:
-        diffusion.forward = diffusion.forward_wo_latents
+        _diffusion.forward = _diffusion.forward_wo_latents
 
-    return diffusion
+    return _diffusion

@@ -4,7 +4,7 @@ w_path: ${dataset.path}/samples
 img_path: ${dataset.path}/images
 stats_path: ${dataset.path}/stats.pt
 base_seq_len: 73
-padding: (7,0)
+padding: [7,0]
 
 # Default parameters
 image_size: 256

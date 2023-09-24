@@ -1,4 +1,4 @@
-seq_length: 336
+seq_length: 80
 timesteps: 1000
 sampling_timesteps: 100
 objective: 'pred_v'

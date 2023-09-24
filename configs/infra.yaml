@@ -26,7 +26,7 @@ sbatch_args:
     num_gpus: ${num_gpus}
     mem_per_gpu: 8
   cpus-per-gpu: 6
-  reservation: "A100"
+  # reservation: "A100"
   comment: ${experiment_name}
 
 sbatch_args_str:

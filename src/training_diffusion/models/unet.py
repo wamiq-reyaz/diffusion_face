@@ -9,7 +9,7 @@ from collections import namedtuple
 import numpy as np
 import torch
 from torch import nn, einsum
-import torch.functional as F
+import torch.nn.functional as F
 
 from einops import rearrange, reduce
 from einops.layers.torch import Rearrange
@@ -246,7 +246,8 @@ class Unet1D(nn.Module):
         init_dim = default(init_dim, dim)
         self.init_conv = nn.Conv1d(input_channels, init_dim, 7, padding = 3)
 
-        dims = [init_dim, *map(lambda m: dim * m, dim_mults)]
+        # ensure that dim_mults is a tuple of ints
+        dims = [init_dim, *map(lambda m: dim * int(m), dim_mults)]
         in_out = list(zip(dims[:-1], dims[1:]))
 
         block_klass = partial(ResnetBlock, groups = resnet_block_groups)

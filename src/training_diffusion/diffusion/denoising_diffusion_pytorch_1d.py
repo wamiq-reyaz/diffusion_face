@@ -122,14 +122,14 @@ def linear_beta_schedule(timesteps, beta_start=0.0001, beta_end=0.02):
     beta_end = scale * beta_end
     return torch.linspace(beta_start, beta_end, timesteps, dtype = torch.float64)
 
-def cosine_beta_schedule(timesteps, s = 0.008):
+def cosine_beta_schedule(timesteps, beta_s = 0.008):
     """
     cosine schedule
     as proposed in https://openreview.net/forum?id=-NEXDKk8gZ
     """
     steps = timesteps + 1
     x = torch.linspace(0, timesteps, steps, dtype = torch.float64)
-    alphas_cumprod = torch.cos(((x / timesteps) + s) / (1 + s) * math.pi * 0.5) ** 2
+    alphas_cumprod = torch.cos(((x / timesteps) + beta_s) / (1 + beta_s) * math.pi * 0.5) ** 2
     alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
     betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
     return torch.clip(betas, 0, 0.999)
@@ -167,9 +167,9 @@ class GaussianDiffusion1D(nn.Module):
         assert objective in {'pred_noise', 'pred_x0', 'pred_v'}, 'objective must be either pred_noise (predict noise) or pred_x0 (predict image start) or pred_v (predict v [v-parameterization as defined in appendix D of progressive distillation paper, used in imagen-video successfully])'
 
         if beta_schedule == 'linear':
-            betas = linear_beta_schedule(timesteps, beta_s=beta_kwargs['beta_s'])
+            betas = linear_beta_schedule(timesteps,  beta_start=beta_kwargs['beta_start'], beta_end=beta_kwargs['beta_end']) 
         elif beta_schedule == 'cosine':
-            betas = cosine_beta_schedule(timesteps, beta_start=beta_kwargs['beta_start'], beta_end=beta_kwargs['beta_end'])
+            betas = cosine_beta_schedule(timesteps, beta_s=beta_kwargs['beta_s'])
         else:
             raise ValueError(f'unknown beta schedule {beta_schedule}')
 

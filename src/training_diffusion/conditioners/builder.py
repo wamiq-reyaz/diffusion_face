@@ -1,4 +1,4 @@
-from rgb import *
+from .rgb import *
 
 
 def get_conditioner(cfg):

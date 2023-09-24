@@ -12,6 +12,7 @@ div_factor: 25.0 # default value
 final_div_factor: 1e4 # default value
 pct_start: 0.2 # default value
 three_phase: false # default value
+lr: 0.0001
 
 # Misc settings.
 desc: null # String to include in result dir name

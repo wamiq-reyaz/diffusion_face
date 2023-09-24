@@ -28,20 +28,24 @@ class WData(Dataset):
         self.stats_path = stats_path
         self.normalize_w = normalize_w
         self.normalize_image = normalize_image
-        self.padding = padding
+
+        _p = [int(p) for p in padding]
+        self.padding = _p
+        if isinstance(image_size, int):
+            image_size = (image_size, image_size)
         self.image_size = image_size
 
         stats = torch.load(self.stats_path)
 
-        if self.normalize:
-            _min, _max = stats['min'].numpy(), stats['max'].numpy()
-            _range = _max - _min
+        if self.normalize_w:
+            _min, _range = stats['min'].numpy(), stats['range'].numpy()
+            # _range = _max - _min
             _range[_range == 0] = 1.
             self._min = torch.from_numpy(_min)
             self._range = torch.from_numpy(_range)
 
     def __len__(self):
-        return 500000 # TODO: change to accept this from cfg
+        return 10240 # TODO: change to accept this from cfg
 
     def __getitem__(self, idx):
         _name = str(idx).zfill(7)
@@ -69,7 +73,7 @@ class WData(Dataset):
             resample=Image.Resampling.BILINEAR
         )
         img = np.array(img).astype(np.float32) / 255.0 # HxWx3
-        img = torch.from_numpy(img).permute(1,2,0) # 3xHxW
+        img = torch.from_numpy(img).permute(2,0,1) # 3xHxW
 
         if self.normalize_image:
             img = img - IMAGENET_MEAN[:, None, None]

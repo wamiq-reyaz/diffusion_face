@@ -3,11 +3,10 @@ from omegaconf import DictConfig, OmegaConf
 
 import torch
 
-from diffusion.builder import get_diffusion
-from models.builder import get_model
-from datasets.builder import create_dataset
-from conditioners import get_conditioner
-
+from .diffusion.builder import get_diffusion
+from .models.builder import get_model
+from .datasets.builder import create_dataset
+from .conditioners.builder import get_conditioner
 
 class ModelBuilder:
     def __init__(self, cfg: DictConfig, rank: int = 0):

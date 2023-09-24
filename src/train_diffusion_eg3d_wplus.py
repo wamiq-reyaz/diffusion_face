@@ -27,7 +27,7 @@ def subprocess_fn(rank, cfg, temp_dir):
     model_builder = ModelBuilder(cfg=cfg, rank=rank)
 
     # Initialize the trainer
-    trainer = BaseTrainer(cfg, model_builder)
+    trainer = BaseTrainer(cfg, model_builder, rank=rank)
 
     # Start the training process
     trainer.train()
@@ -44,7 +44,7 @@ def main(cfg: DictConfig):
     # Create a temporary directory for distributed training
     with tempfile.TemporaryDirectory() as temp_dir:
         if cfg.num_gpus == 1:
-            subprocess_fn(rank=0, c=cfg, temp_dir=temp_dir)
+            subprocess_fn(rank=0, cfg=cfg, temp_dir=temp_dir)
         else:
             torch.multiprocessing.spawn(fn=subprocess_fn, args=(cfg, temp_dir), nprocs=cfg.num_gpus)
 

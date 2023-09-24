@@ -1,7 +1,8 @@
-from latent import WData
+from .latent import WData
 
 def create_dataset(cfg):
     dataset = WData(
+        cfg=cfg,
         w_path=cfg.dataset.w_path,
         img_path=cfg.dataset.img_path,
         stats_path=cfg.dataset.stats_path,

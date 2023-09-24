@@ -7,6 +7,7 @@ import uuid
 import warnings
 from datetime import datetime as dt
 from typing import Dict
+from omegaconf import OmegaConf
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -34,14 +35,13 @@ class BaseTrainer:
         self.cfg = cfg
         self.rank = rank
 
-        if device is None:
-            device = torch.device(
-                'cuda') if torch.cuda.is_available() else torch.device('cpu')
+        device = torch.device(
+            'cuda') if torch.cuda.is_available() else torch.device('cpu')
         self.device = device
         model_builder = model_builder
-        self.model = model_builder.get_model(cfg)
-        self.train_loader = model_builder.get_train_loader(cfg)
-        self.test_loader = model_builder.get_test_loader(cfg)
+        self.model = model_builder.get_model()
+        self.train_loader = model_builder.get_train_loader()
+        self.test_loader = model_builder.get_test_loader()
         self.optimizer = self.init_optimizer()
         self.scheduler = self.init_scheduler()
 
@@ -75,22 +75,23 @@ class BaseTrainer:
         self.model = model
 
     def init_optimizer(self):
-        m = self.model.module if self.config.multigpu else self.model
+        m = self.model.module if self.cfg.num_gpus > 1 else self.model
 
-        if self.config.same_lr:
-            print("Using same LR")
-            if hasattr(m, 'core'):
-                m.core.unfreeze()
-            params = self.model.parameters()
-        else:
-            print("Using diff LR")
-            if not hasattr(m, 'get_lr_params'):
-                raise NotImplementedError(
-                    f"Model {m.__class__.__name__} does not implement get_lr_params. Please implement it or use the same LR for all parameters.")
+        # if self.config.same_lr:
+        #     print("Using same LR")
+        #     if hasattr(m, 'core'):
+        #         m.core.unfreeze()
+        #     params = self.model.parameters()
+        # else:
+        #     print("Using diff LR")
+        #     if not hasattr(m, 'get_lr_params'):
+        #         raise NotImplementedError(
+        #             f"Model {m.__class__.__name__} does not implement get_lr_params. Please implement it or use the same LR for all parameters.")
 
-            params = m.get_lr_params(self.config.lr)
+        #     params = m.get_lr_params(self.config.lr)
+        params = m.parameters()
 
-        return optim.AdamW(params, lr=self.cfg.optimizer.lr, weight_decay=self.config.wd)
+        return optim.AdamW(params, lr=self.cfg.training.lr)
 
     def init_scheduler(self):
         lrs = [l['lr'] for l in self.optimizer.param_groups]
@@ -106,7 +107,13 @@ class BaseTrainer:
                                             three_phase=self.cfg.training.three_phase)
 
     def train_on_batch(self, batch, train_step):
-        raise NotImplementedError
+        loss = self.model(batch['data'], condition=None)
+        for k, v in loss.items():
+            loss[k].backward()
+        self.optimizer.step()
+        return loss
+    
+        # raise NotImplementedError
 
     def validate_on_batch(self, batch, val_step):
         raise NotImplementedError
@@ -122,7 +129,7 @@ class BaseTrainer:
 
     @property
     def total_iter(self):
-        return self.cfg.total_iter
+        return self.cfg.training.total_iter
 
     def should_early_stop(self):
         if self.config.get('early_stop', False) and self.step > self.config.early_stop:
@@ -131,16 +138,17 @@ class BaseTrainer:
     def train(self):
         if is_rank_zero(self.rank):
             print('Training...')
-        if self.uid is None:
-            self.uid = str(uuid.uuid4()).split('-')[-1]
+        self.uid = str(uuid.uuid4()).split('-')[-1]
         run_id = f"{dt.now().strftime('%Y-%m-%d__%H:%M:%S')}-{self.uid}"
         self.run_id = run_id
         experiment_dir = os.path.basename(self.cfg.experiment_dir)
         self.experiment_id = f"{experiment_dir}_{run_id}"
         self.should_write = (self.rank == 0)
         self.should_log = self.should_write  # and logging
+        # convert omegaconf to dict
+        cfg_to_log = OmegaConf.to_container(self.cfg)
         if self.should_log:
-            wandb.init(project=self.cfg.project, name=self.experiment_id, config=self.cfg, dir=self.cfg.experiment_dir,
+            wandb.init(project=self.cfg.project, name=self.experiment_id, config=cfg_to_log, dir=self.cfg.experiment_dir,
                        notes=self.cfg.notes, settings=wandb.Settings(start_method="fork"))
 
         self.model.train()
@@ -159,8 +167,8 @@ class BaseTrainer:
             lambda kv: f"{colors.fg.purple}{kv[0]}{colors.reset}: {round(kv[1].item(),3):.4e}", L.items()))
         
         for _iter in range(self.total_iter):
-            if self.should_early_stop():
-                break
+            # if self.should_early_stop():
+            #     break
             
             # ------------------------------------------------------------------------------------------------------
             # Training loop
@@ -168,9 +176,6 @@ class BaseTrainer:
             pbar = tqdm(enumerate(self.train_loader), desc=f"Iter: {_iter}/{self.total_iter}. Loop: Train",
                         total=self.total_iter) if is_rank_zero(self.rank) else enumerate(self.train_loader)
             for i, batch in pbar:
-                if self.should_early_stop():
-                    print("Early stopping")
-                    break
 
                 losses = self.train_on_batch(batch, i)
 
@@ -215,7 +220,7 @@ class BaseTrainer:
 
                         self.model.train()
 
-                        if self.config.distributed:
+                        if self.cfg.num_gpus > 1:
                             dist.barrier()
 
                 # ------------------------------------------------------------------------------------------------------

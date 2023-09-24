@@ -466,10 +466,10 @@ def extract(a, t, x_shape):
     out = a.gather(-1, t)
     return out.reshape(b, *((1,) * (len(x_shape) - 1)))
 
-def linear_beta_schedule(timesteps):
+def linear_beta_schedule(timesteps, beta_start=0.0001, beta_end=0.02):
     scale = 1000 / timesteps
-    beta_start = scale * 0.0001
-    beta_end = scale * 0.02
+    beta_start = scale * beta_start
+    beta_end = scale * beta_end
     return torch.linspace(beta_start, beta_end, timesteps, dtype = torch.float64)
 
 def cosine_beta_schedule(timesteps, s = 0.008):

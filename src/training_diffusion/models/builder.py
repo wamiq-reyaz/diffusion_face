@@ -2,8 +2,8 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 
 
-from unet import Unet1D
-from uvit import UViT
+from .unet import Unet1D
+from .uvit import UViT
 
 
 def get_model(cfg: DictConfig):

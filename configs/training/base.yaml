@@ -1,5 +1,5 @@
-
-per_gpu_batch_size: 64
+name: rgb_conditional
+per_gpu_batch_size: 128
 batch_size: 64 # Total batch size  # TODO
 test_batch_gpu: 64 # Batch size at test time
 
@@ -10,7 +10,7 @@ resume: latest # Resume from given network pickle
 cycle_momentum: true
 div_factor: 25.0 # default value
 final_div_factor: 1e4 # default value
-pct_start: 0.2 # default value
+pct_start: 0.02 
 three_phase: false # default value
 lr: 0.0001
 
@@ -25,5 +25,5 @@ snap: 5000 # How often to save snapshots
 image_snap: 5000 # How often to save samples?
 seed: 0 # Random seed
 nobench: false # Disable cuDNN benchmarking
-workers: 4 # DataLoader worker processes
+workers: 8 # DataLoader worker processes
 dry_run: false # Print training options and exit

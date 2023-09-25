@@ -51,3 +51,10 @@ python reenact_avatar_next3d.py --drive_root=data/reenactment/obama \
 ```bash
 accelerate launch --config_file configs/attempt1.yaml --main_process_port 5431 train_diffusion_eg3d_wplus.py
 ```
+
+```bash
+python src/infra/launch.py slurm=True training.resume=False experiment_name=tinki \
+training.workers=4 training.per_gpu_batch_size=32 \
+num_gpus=1 sbatch_args.time="01:00:00"  sbatch_args.mem.mem_per_gpu=16 
+```
+

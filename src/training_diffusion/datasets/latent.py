@@ -45,10 +45,13 @@ class WData(Dataset):
             self._range = torch.from_numpy(_range)
 
     def __len__(self):
-        return 10240 # TODO: change to accept this from cfg
+        return 500000 # TODO: change to accept this from cfg
 
     def __getitem__(self, idx):
         _name = str(idx).zfill(7)
+        if not os.path.exists(os.path.join(self.w_path, _name + '.npy')) or \
+            not os.path.exists(os.path.join(self.img_path, _name + '.png')):
+            _name = '0000000'
         data = np.load(os.path.join(self.w_path, _name + '.npy'))
         data = torch.from_numpy(data).float() # SxE
         if self.normalize_w:
@@ -62,13 +65,13 @@ class WData(Dataset):
 
         # ----------------------------------------
 
-        img = Image.open(
+        img_pil = Image.open(
             os.path.join(
                 self.img_path,
                 _name + '.png'
             )
         )
-        img = img.resize(
+        img = img_pil.resize(
             self.image_size,
             resample=Image.Resampling.BILINEAR
         )
@@ -78,6 +81,9 @@ class WData(Dataset):
         if self.normalize_image:
             img = img - IMAGENET_MEAN[:, None, None]
             img = img / IMAGENET_STD[:, None, None]
+        
+        # close the image
+        img_pil.close()
 
         return {'data': data,
                 'condition': img}

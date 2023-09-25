@@ -6,6 +6,7 @@ dataset_preprocessing/ffhq/deca/data
 **/__pycache__
 
 # Output related
+wandb
 notebooks/outputs
 
 notebooks/*.pt

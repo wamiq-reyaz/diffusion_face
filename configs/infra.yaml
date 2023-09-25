@@ -4,7 +4,7 @@ env_args:
   python_bin: ${env.python_bin}
   python_script: ${experiment_dir}/src/infra/slurm_job.py
 
-num_gpus: 1
+num_gpus: 4
 print_only: false
 slurm: false
 
@@ -19,13 +19,13 @@ run_profiling: false
 
 sbatch_args:
   constraint: ${env.slurm_constraint}
-  time: "0-01:00:00"
+  time: "0-24:00:00"
   gres: gpu:${num_gpus}
   mem:
     _target_: src.infra.utils.num_gpus_to_mem
     num_gpus: ${num_gpus}
-    mem_per_gpu: 8
-  cpus-per-gpu: 6
+    mem_per_gpu: 64
+  cpus-per-gpu: 8
   # reservation: "A100"
   comment: ${experiment_name}
 

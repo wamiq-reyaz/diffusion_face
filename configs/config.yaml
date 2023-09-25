@@ -16,6 +16,12 @@ defaults:
 
   - infra.yaml
 
+  - conditioner/base.yaml
+  - conditioner: deeplab
+
+  - optimizer/base.yaml
+  - optimizer: base
+
   - _self_
   
   # ----------------------------------------------------------------------------

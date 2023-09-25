@@ -7,7 +7,7 @@ from .denoising_diffusion_pytorch_1d import GaussianDiffusion1D
 def get_diffusion(cfg: DictConfig, model):
     _diffusion = GaussianDiffusion1D(
         model=model,
-        seq_length=cfg.diffusion.seq_length,
+        seq_length=cfg.diffusion.seq_length+cfg.conditioner.seq_length,
         timesteps=cfg.diffusion.timesteps,
         sampling_timesteps=cfg.diffusion.sampling_timesteps,
         objective =cfg.diffusion.objective,

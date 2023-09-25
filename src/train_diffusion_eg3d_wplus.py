@@ -11,7 +11,7 @@ from omegaconf import DictConfig, OmegaConf
 import torch
 
 from training_diffusion.builder import ModelBuilder
-from training_diffusion.trainers.base_trainer import BaseTrainer
+from training_diffusion.trainers.builder import get_trainer
 
 
 # ------------------------------------------------------------------------------
@@ -33,7 +33,7 @@ def subprocess_fn(rank, cfg, temp_dir):
     model_builder = ModelBuilder(cfg=cfg, rank=rank)
 
     # Initialize the trainer
-    trainer = BaseTrainer(cfg, model_builder, rank=rank)
+    trainer = get_trainer(cfg, model_builder, rank=rank)
 
     # Start the training process
     trainer.train()
@@ -42,7 +42,7 @@ def subprocess_fn(rank, cfg, temp_dir):
 # Main function
 # ------------------------------------------------------------------------------
     
-@hydra.main(config_path="..", config_name="experiment_config.yaml")
+@hydra.main(config_path="..", config_name="experiment_config.yaml", version_base="1.2")
 def main(cfg: DictConfig):
     OmegaConf.set_struct(cfg, True)
     torch.multiprocessing.set_start_method('spawn')

@@ -9,6 +9,22 @@ from .models.builder import get_model
 from .datasets.builder import create_dataset
 from .conditioners.builder import get_conditioner
 
+from torch.utils.data.distributed import DistributedSampler
+from torch.utils.data import Subset
+
+class InfiniteDataSampler(DistributedSampler):
+    def __init__(self,
+                 dataset, num_replicas=None, rank=None, shuffle=True, seed=0, drop_last=False):
+        super().__init__(dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle, seed=seed, drop_last=drop_last)
+        self.epoch = 0
+
+    def __iter__(self):
+        while True:
+            self.epoch += 1
+            super().set_epoch(self.epoch)
+            yield from super().__iter__()
+        
+
 class ModelBuilder:
     def __init__(self, cfg: DictConfig, rank: int = 0):
         self.cfg = cfg
@@ -16,10 +32,10 @@ class ModelBuilder:
         # Create a dataset
         self.dataset = create_dataset(cfg)
         if cfg.num_gpus > 1:
-            sampler = torch.utils.data.distributed.DistributedSampler(self.dataset,
-                                                                    num_replicas=cfg.num_gpus,
-                                                                    rank=rank,
-                                                                    shuffle=True)
+            sampler = InfiniteDataSampler(self.dataset,
+                                        num_replicas=cfg.num_gpus,
+                                        rank=rank,
+                                        shuffle=True)
         else:
             sampler = None
 
@@ -31,7 +47,18 @@ class ModelBuilder:
                                                         shuffle=False,
                                                         drop_last=True)
         # Make infinite. WARNING: shuffle is performed only once
-        self.train_loader = cycle(self.train_loader)
+        # self.train_loader = cycle(self.train_loader)
+
+        self.test_dataset = create_dataset(cfg)
+        self.test_dataset = Subset(self.test_dataset, range(1024))
+
+        self.test_loader = torch.utils.data.DataLoader(self.test_dataset,
+                                                        batch_size=cfg.training.test_batch_gpu,
+                                                        num_workers=cfg.training.workers,
+                                                        sampler=None,
+                                                        pin_memory=True,
+                                                        shuffle=False,
+                                                        drop_last=True)
 
         # Create a model
         model = get_model(cfg)
@@ -46,7 +73,6 @@ class ModelBuilder:
         self.conditioner = get_conditioner(cfg)
         if self.conditioner:
             self.conditioner = self.conditioner.cuda()
-        if self.conditioner:
             if cfg.num_gpus > 1:
                 self.conditioner = torch.nn.parallel.DistributedDataParallel(self.conditioner,
                                                                          device_ids=[rank],
@@ -62,4 +88,4 @@ class ModelBuilder:
         return self.train_loader
 
     def get_test_loader(self):
-        return None # TODO
+        return self.test_loader # TODO

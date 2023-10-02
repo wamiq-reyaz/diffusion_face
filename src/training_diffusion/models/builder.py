@@ -27,6 +27,7 @@ def get_model(cfg: DictConfig):
                     extras=cfg.model.extras,
                     len_latents=cfg.model.len_latents,
                     embed_dim=cfg.model.embed_dim,
+                    channels=cfg.model.channels,
                     depth=cfg.model.depth,
                     num_heads=cfg.model.num_heads,
                     mlp_ratio=cfg.model.mlp_ratio,

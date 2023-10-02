@@ -13,6 +13,7 @@ final_div_factor: 1e4 # default value
 pct_start: 0.02 
 three_phase: false # default value
 lr: 0.0001
+clip_grad_norm: 0.0
 
 # Misc settings.
 desc: null # String to include in result dir name

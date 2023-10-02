@@ -2,7 +2,7 @@ name: unet
 dim: 512
 init_dim: null
 out_dim: 512
-dim_mults: [1,2,4]
+dim_mults: [1,2,2,4]
 channels: 512
 self_condition: False
 resnet_block_groups: 8
@@ -12,7 +12,7 @@ random_fourier_features: False
 learned_sinusoidal_dim: 16
 
 
-is_conditional: false
+is_conditional: true
 add_condition: false
 scale_condition: true
 

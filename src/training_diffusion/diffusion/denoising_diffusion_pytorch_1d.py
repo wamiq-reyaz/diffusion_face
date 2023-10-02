@@ -20,8 +20,6 @@ from torch.utils.tensorboard import SummaryWriter
 import torchvision
 
 import sys
-sys.path.append('..')
-from gen_samples_next3d import PATTERN, replace_hook, WS
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -335,17 +333,30 @@ class GaussianDiffusion1D(nn.Module):
         return img
 
     @torch.no_grad()
-    def ddim_sample(self, shape, clip_denoised = True, condition=None):
+    def ddim_sample(self, shape, clip_denoised = True, condition=None, q_sample_idx=0, gt_elem=None, eta_steps=25):
         batch, device, total_timesteps, sampling_timesteps, eta, objective = shape[0], self.betas.device, self.num_timesteps, self.sampling_timesteps, self.ddim_sampling_eta, self.objective
 
         times = torch.linspace(-1, total_timesteps - 1, steps=sampling_timesteps + 1)   # [-1, 0, 1, 2, ..., T-1] when sampling_timesteps == total_timesteps
         times = list(reversed(times.int().tolist()))
         time_pairs = list(zip(times[:-1], times[1:])) # [(T-1, T-2), (T-2, T-3), ..., (1, 0), (0, -1)]
 
-        img = torch.randn(shape, device = device)
+        if q_sample_idx > 0:
+            # the sequence has a few elements that are already known, use the GT for them
+            assert gt_elem is not None, "Need to provide the GT element for the q_sample_idx"
+            if not isinstance(gt_elem, torch.Tensor):
+                gt_elem = torch.tensor(gt_elem, device=device)
+            if gt_elem.numel() == 1:
+                gt_elem = torch.ones(*shape).to(device) * gt_elem
 
+            if gt_elem.shape[0] != batch:
+                raise ValueError(f"GT element shape {gt_elem.shape} does not match batch size {batch}")
+            
+            replacements = iter([self.q_sample(x_start=gt_elem, t=torch.full((batch,), t[0], device=device, dtype=torch.long), noise=None) for t in time_pairs])
+
+        img = torch.randn(shape, device = device)
         x_start = None
 
+        _iter = 0
         for time, time_next in time_pairs:
             time_cond = torch.full((batch,), time, device=device, dtype=torch.long)
             self_cond = x_start if self.self_condition else None
@@ -368,6 +379,14 @@ class GaussianDiffusion1D(nn.Module):
             img = x_start * alpha_next.sqrt() + \
                   c * pred_noise + \
                   sigma * noise
+            
+            if q_sample_idx > 0:
+                # replace the element with the GT
+                img[:, :, :q_sample_idx] = next(replacements)[:, :, :q_sample_idx]
+            
+            if _iter > eta_steps:
+                eta = 0.
+            _iter += 1
 
         img = self.unnormalize(img)
         return img

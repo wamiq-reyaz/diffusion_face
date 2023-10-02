@@ -84,6 +84,10 @@ class Trainer(BaseTrainer):
         loss = self.model(batch['data'], condition=condition) 
         for k, v in loss.items():
             loss[k].backward()
+        # perform gradient clipping
+        if self.cfg.training.clip_grad_norm > 0:
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.cfg.training.clip_grad_norm)
+            torch.nn.utils.clip_grad_norm_(self.conditioner.parameters(), self.cfg.training.clip_grad_norm)
         self.optimizer.step()
         return loss
         

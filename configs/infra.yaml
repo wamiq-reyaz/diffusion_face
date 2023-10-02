@@ -19,14 +19,15 @@ run_profiling: false
 
 sbatch_args:
   constraint: ${env.slurm_constraint}
-  time: "0-24:00:00"
+  time: "0-18:00:00"
   gres: gpu:${num_gpus}
   mem:
     _target_: src.infra.utils.num_gpus_to_mem
     num_gpus: ${num_gpus}
     mem_per_gpu: 64
   cpus-per-gpu: 8
-  # reservation: "A100"
+  reservation: "A100"
+  account: conf-cvpr-2023.11.17-wonkap
   comment: ${experiment_name}
 
 sbatch_args_str:

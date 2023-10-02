@@ -86,7 +86,8 @@ class WData(Dataset):
         img_pil.close()
 
         return {'data': data,
-                'condition': img}
+                'condition': img,
+                'idx': torch.tensor(idx, dtype=torch.int32).view(1)}
 
 
 

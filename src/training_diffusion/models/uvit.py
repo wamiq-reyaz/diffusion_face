@@ -139,21 +139,25 @@ class UViT(nn.Module):
                 cfg=None,
                 extras=256,
                 len_latents=16,
-                embed_dim=768,
+                embed_dim=768, # within the transformer
+                channels=512, # channels in the input
                 depth=12,
                 num_heads=12,
                 mlp_ratio=4.,
                 qkv_bias=False,
                 qk_scale=None,
-                norm_layer=nn.LayerNorm,
+                norm_layer='LayerNorm',
                 mlp_time_embed=False,
                 use_checkpoint=False,
                 skip=True,
-                scale_y=False):
+                scale_y=False,
+                self_condition=False,):
         super().__init__()
         self.cfg = cfg
-
+        norm_layer = getattr(nn, norm_layer)
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
+        self.channels = channels
+        self.self_condition = self_condition
 
         len_latents = len_latents
 
@@ -167,7 +171,8 @@ class UViT(nn.Module):
         self.scale_y = scale_y
 
         self.pos_embed = nn.Parameter(torch.zeros(1, self.extras + len_latents, embed_dim))
-
+        
+        self.input_embedder = nn.Conv1d(channels, embed_dim, kernel_size=1, stride=1, padding=0)
         self.in_blocks = nn.ModuleList([
             Block(
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
@@ -185,7 +190,7 @@ class UViT(nn.Module):
             for _ in range(depth // 2)])
 
         self.norm = norm_layer(embed_dim)
-        self.decoder_pred = nn.Linear(embed_dim, self.embed_dim, bias=True)
+        self.decoder_pred = nn.Linear(embed_dim, self.channels, bias=True)
 
         trunc_normal_(self.pos_embed, std=.02)
         self.apply(self._init_weights)
@@ -203,15 +208,20 @@ class UViT(nn.Module):
     def no_weight_decay(self):
         return {'pos_embed'}
 
-    def forward(self, x, timesteps, y=None):
-        x = self.patch_embed(x)
+    def forward(self, x, time, condition=None, x_self_cond=None):
+        # first embed the input
+        x = self.input_embedder(x)
+
+        # now fit the input into the transformer
+        x = einops.rearrange(x, 'B C L -> B L C')
+
         B, L, D = x.shape
 
-        time_token = self.time_embed(timestep_embedding(timesteps, self.embed_dim))
+        time_token = self.time_embed(timestep_embedding(time, self.embed_dim))
         time_token = time_token.unsqueeze(dim=1)
         x = torch.cat((time_token, x), dim=1)
-        if y is not None:
-            x = torch.cat((y, x), dim=1)
+        if condition is not None:
+            x = torch.cat((condition, x), dim=1)
         x = x + self.pos_embed
 
         skips = []

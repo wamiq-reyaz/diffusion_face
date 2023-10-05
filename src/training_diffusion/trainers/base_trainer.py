@@ -17,6 +17,7 @@ import torch.nn as nn
 import torch.optim as optim
 import wandb
 from tqdm import tqdm
+from ema_pytorch import EMA
 
 class colors:
     '''Colors class:
@@ -130,6 +131,15 @@ class BaseTrainer:
         self.test_loader = model_builder.get_test_loader()
         self.optimizer = self.init_optimizer()
         self.scheduler = self.init_scheduler()
+        if self.rank == 0:
+            if self.cfg.training.get('ema', False):
+                self.ema = EMA(self.model,
+                                beta=self.cfg.training.ema_beta,
+                                update_every=self.cfg.training.ema_update_every,
+                                update_after_step=self.cfg.training.ema_update_after_step
+                            ).cuda()
+            else:
+                self.ema = None
 
     def resize_to_target(self, prediction, target):
         if prediction.shape[2:] != target.shape[-2:]:
@@ -267,9 +277,17 @@ class BaseTrainer:
                     f"Iter: {_iter}/{self.total_iter}. Loop: Train. Losses: {stringify_losses(losses)}")
             self.scheduler.step()
 
+            if is_rank_zero(self.rank):
+                if self.ema:
+                    self.ema.update()
+
             if self.should_log and self.step % 50 == 0:
                 wandb.log({f"Train/{name}": loss.item()
                             for name, loss in losses.items()}, step=self.step)
+                
+                # log the learning rates
+                wandb.log({f"LR/{i}": lr 
+                            for i, lr in enumerate(self.scheduler.get_last_lr())}, step=self.step)
 
             self.step += 1
 

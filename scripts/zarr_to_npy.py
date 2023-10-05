@@ -62,7 +62,9 @@ def producer_fn(rank, **args):
     data = np.zeros((args['chunk_size'], num_keys, 512), dtype=np.float32)
     for _chunk in _iterator:
         for ii, n in enumerate(WS):
-            data[:, ii, :] = group[n]['data'][list(_chunk), :]
+            idxer = list(_chunk)
+            local_idxer = list(range(len(idxer)))
+            data[local_idxer, ii, :] = group[n]['data'][idxer, :]
 
         # put data on the queue
         args['queue'].put({'data':data,
@@ -73,7 +75,7 @@ def producer_fn(rank, **args):
 if __name__ == '__main__':
     def main():
         try:
-            store = zarr.LMDBStore('/ibex/ai/home/parawr/Projects/diffusion/data/w_plus_img_cams_ids_0.7_500k_final/samples.lmdb',
+            store = zarr.LMDBStore('/ibex/ai/home/parawr/Projects/diffusion/data/w_plus_img_nocams_ids_0.7_150k/samples.lmdb',
                                     readonly=True,
                                     lock=False,)
             queue = mp.Queue()
@@ -83,10 +85,11 @@ if __name__ == '__main__':
             args['queue'] = queue
             args['chunk_size'] = 1024
             args['world_size'] = 10
-            args['outdir'] = '/ibex/ai/home/parawr/Projects/diffusion/data/w_plus_img_cams_ids_0.7_500k_final/samples'
+            args['outdir'] = '/ibex/ai/home/parawr/Projects/diffusion/data/w_plus_img_nocams_ids_0.7_150k/w_plus_img_nocams_ids_0.7_150k/samples'
+            os.makedirs(args['outdir'], exist_ok=True)
 
             writers = []
-            for rank in range(20):
+            for rank in range(8):
                 writers.append(mp.Process(target=consumer_proxy, args=(rank, args)))
                 writers[-1].start()
             print('Writers started')

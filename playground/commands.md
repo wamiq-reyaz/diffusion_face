@@ -21,21 +21,49 @@ python save_samples_next3d.py --outdir=out --trunc=0.7 --shapes=False --seeds=16
 python save_samples_next3d.py --outdir=out --trunc=0.7 --shapes=False --seeds=169     --network=../pretrained_models/next3d_ffhq_512.pkl --obj_path=data/demo/demo.obj     --lms_path=data/demo/demo_kpt2d.txt --lms_cond=True --only_frontal=True --reload_modules=True --outdir=/mnt/ibex_ai/Projects/diffusion/data/w_plus_img
 
 python save_samples_next3d.py --outdir=out --trunc=0.7 --shapes=False --seeds=169     \
+--trunc-cutoff 28 \
 --network=../pretrained_models/next3d_ffhq_512.pkl \
 --obj_path=../data/demo/demo.obj    \
 --lms_path=../data/demo/demo_kpt2d.txt \
---lms_cond=True --only_frontal=True --reload_modules=False \
---outdir=/ibex/ai/home/parawr/Projects/diffusion/data/w_plus_img_cams_ids_0.7_500k_final \
+--lms_cond=True --reload_modules=False \
+--outdir=/ibex/ai/home/parawr/Projects/diffusion/data/w_plus_img_cams_ids_0.7_2m_final_test1 \
+--scale_lms=False \
+--num_gpus 1 \
+--num_writers 10 \
+--batch_size 8 \
+--sample_cams True \
+--sample_ids True \
+--dataset_path /ibex/ai/home/parawr/Projects/diffusion/data/ffhq_512_posed_eg3d \
+--mesh_path /ibex/ai/home/parawr/Projects/diffusion/data/ffhq_512_posed_eg3d/deca_results_unposed \
+--num_samples 1024 \
+--horizontal
+--lmdb True
+```
+
+```
+python save_samples_next3d.py --outdir=out --trunc=0.7 --shapes=False --seeds=169     \
+--trunc-cutoff 28 \
+--network=../pretrained_models/next3d_ffhq_512.pkl \
+--obj_path=../data/demo/demo.obj    \
+--lms_path=../data/demo/demo_kpt2d.txt \
+--lms_cond=True --reload_modules=False \
+--outdir=/ibex/ai/home/parawr/Projects/diffusion/data/w_plus_img_cams_ids_0.7_2m_final \
 --scale_lms=False \
 --num_gpus 4 \
---num_writers 10 \
+--num_writers 16 \
 --batch_size 32 \
 --sample_cams True \
 --sample_ids True \
 --dataset_path /ibex/ai/home/parawr/Projects/diffusion/data/ffhq_512_posed_eg3d \
 --mesh_path /ibex/ai/home/parawr/Projects/diffusion/data/ffhq_512_posed_eg3d/deca_results_unposed \
---num_samples 499712 \
+--num_samples 1999872 \
+--horizontal_stddev 0.1 \
+--vertical_stddev 0.1 \
 --lmdb True
+```
+
+```
+salloc --time 16:00:00 --gres gpu:v100:4 --cpus-per-task 16  --mem 64G --account=conf-cvpr-2023.11.17-wonkap
 ```
 
 ### Reenactment

@@ -172,7 +172,7 @@ class UViT(nn.Module):
 
         self.pos_embed = nn.Parameter(torch.zeros(1, self.extras + len_latents, embed_dim))
         
-        self.input_embedder = nn.Conv1d(channels, embed_dim, kernel_size=1, stride=1, padding=0)
+        self.input_embedder = nn.Linear(channels, embed_dim)
         self.in_blocks = nn.ModuleList([
             Block(
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
@@ -209,21 +209,26 @@ class UViT(nn.Module):
         return {'pos_embed'}
 
     def forward(self, x, time, condition=None, x_self_cond=None):
-        # first embed the input
-        x = self.input_embedder(x)
-
-        # now fit the input into the transformer
+        # first fit the input into the transformer
         x = einops.rearrange(x, 'B C L -> B L C')
+        condition = einops.rearrange(condition, 'B C L -> B L C') if condition is not None else None
 
         B, L, D = x.shape
 
+        if condition is not None:
+            x = torch.cat((condition, x), dim=1)
+
+        # now we embed
+        x = self.input_embedder(x)
+        # and concat time
         time_token = self.time_embed(timestep_embedding(time, self.embed_dim))
         time_token = time_token.unsqueeze(dim=1)
         x = torch.cat((time_token, x), dim=1)
-        if condition is not None:
-            x = torch.cat((condition, x), dim=1)
+        
+        # now we add the positional embedding
         x = x + self.pos_embed
 
+        # Run the transformer
         skips = []
         for blk in self.in_blocks:
             x = blk(x)
@@ -237,6 +242,7 @@ class UViT(nn.Module):
         x = self.norm(x)
         x = self.decoder_pred(x)
         assert x.size(1) == self.extras + L
+        # Remove the time and condition tokens
         x = x[:, self.extras:, :]
         x = einops.rearrange(x, 'B L C -> B C L')
         return x

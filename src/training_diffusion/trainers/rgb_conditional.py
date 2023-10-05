@@ -93,11 +93,12 @@ class Trainer(BaseTrainer):
         
     def validate_on_batch(self, batch, val_step):
         condition = self.conditioner(batch['condition'])
-
         if self.cfg.num_gpus > 1:
             m = self.model.module
         else:
             m = self.model
+
+        m = self.ema if self.ema else m
 
         latents = m.ddim_sample(batch['data'].shape, condition=condition)
         mse = torch.mean((latents - batch['data'].cuda())**2)
@@ -122,6 +123,7 @@ class Trainer(BaseTrainer):
             'conditioner': cm.state_dict(),
             'optimizer': self.optimizer.state_dict(),
             'scheduler': self.scheduler.state_dict(),
+            'ema': self.ema.state_dict() if self.ema else None,
             'step': self.step,
         }, fpath)
     

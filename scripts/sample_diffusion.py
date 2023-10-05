@@ -21,8 +21,7 @@ from gen_samples_next3d import PATTERN, w_plus_hook, set_replacement_hook, WS
 
 from training.dataset import ImageFolderDataset
 
-from training_diffusion.denoising_diffusion_pytorch.denoising_diffusion_pytorch_1d import (
-    Unet1D,
+from training_diffusion.diffusion.denoising_diffusion_pytorch_1d import (
     GaussianDiffusion1D
 )
 

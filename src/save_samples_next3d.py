@@ -175,7 +175,8 @@ def generate_images(
     shape_format: str,
     lms_cond: bool,
     reload_modules: bool,
-    only_frontal: bool,
+    horizontal_stddev: float,
+    vertical_stddev: float,
     scale_lms:bool,
     num_samples: int,
     save_images: bool,
@@ -193,6 +194,8 @@ def generate_images(
     torch.cuda.set_device(rank)
     torch.manual_seed(rank)
     torch.cuda.manual_seed(rank)
+    random.seed(rank)
+    np.random.seed(rank)
 
     # ----------------------------------------------------------------------------
     # Setup the hooks
@@ -251,7 +254,7 @@ def generate_images(
         dataloader = DataLoader(dataset, 
                                     batch_size=batch_size,
                                     shuffle=False,
-                                    num_workers=4,
+                                    num_workers=6,
                                     sampler=sampler,
                                     pin_memory=True)
     else:
@@ -292,47 +295,55 @@ def generate_images(
             end = (curr_idx + 1) * bs
             curr_seed_idxes = seed_idxes[start:end]
 
-            angle_p = -0.2
-            if only_frontal:
-                angles = [(0, angle_p)]
-            else:
-                angles = [(.4, angle_p), (0, angle_p), (-.4, angle_p)]
+            # TODO: sample conditioning and camera parameters independently
+            if sample_cams or sample_ids:
+                _, conditioning_params, v = next(dloader_iterator)
+                _c = conditioning_params.cuda()
+                _v = v.cuda()
+            if not sample_cams:
+                _c = conditioning_params_orig.repeat_interleave(bs, dim=0)
+            if not sample_ids:
+                _v = v_orig.repeat_interleave(bs, dim=0)
 
-            for angle_y, angle_p in angles:
-                # TODO: sample conditioning and camera parameters independently
-                if sample_cams or sample_ids:
-                    _, conditioning_params, v = next(dloader_iterator)
-                    _c = conditioning_params.cuda()
-                    _v = v.cuda()
-                if not sample_cams:
-                    _c = conditioning_params_orig.repeat_interleave(bs, dim=0)
-                if not sample_ids:
-                    _v = v_orig.repeat_interleave(bs, dim=0)
+            if horizontal_stddev > 0 or vertical_stddev > 0:
+                cam2world_pose = LookAtPoseSampler.sample(
+                                    horizontal_mean=3.14/2,
+                                    vertical_mean=3.14/2,
+                                    lookat_position=torch.tensor([0, 0, 0.2]).cuda(),
+                                    horizontal_stddev=horizontal_stddev,
+                                    vertical_stddev=vertical_stddev,
+                                    radius=2.7,
+                                    batch_size= bs,
+                                    device='cuda'
+                                    ).cuda()
+                intrinsics = FOV_to_intrinsics(fov_deg).cuda()
+                # TODO: change view point and intrinsics to simulate different cameras
+                _c = torch.cat([cam2world_pose.reshape(-1, 16), intrinsics.reshape(-1, 9).repeat_interleave(bs, 0)], 1)
 
-                ws = G.mapping(z, _c, truncation_psi=truncation_psi, truncation_cutoff=truncation_cutoff)
-                # clear the list before synthesising
-                ALL_DICT = []
-                img = G.synthesis(ws, _c, _v, noise_mode='const')['image']
+            ws = G.mapping(z, _c, truncation_psi=truncation_psi, truncation_cutoff=truncation_cutoff)
+            # clear the list before synthesising
+            ALL_DICT = []
+            img = G.synthesis(ws, _c, _v, noise_mode='const')['image']
 
-                # ----------------------------------------------------------------------------
-                # Save the images
-                # ----------------------------------------------------------------------------
-                if save_images:
-                    img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
-                    img = img.clone().detach().cpu().numpy()
-                    queue.put({'idx': curr_seed_idxes,
-                               'img': img,
-                               'dir': os.path.join(outdir, 'images')
-                               })
-                
-                # ----------------------------------------------------------------------------
-                # Save the arrays
-                # ----------------------------------------------------------------------------
-                for k in ALL_DICT:
-                    valid_len = k[1].shape[-1]
-                    data = np.ones((len(curr_seed_idxes), 512), dtype=np.float32)
-                    data[:, :valid_len] = k[1].numpy()
-                    _array[k[0]]['data'][curr_seed_idxes, :] = data
+            # ----------------------------------------------------------------------------
+            # Save the images
+            # ----------------------------------------------------------------------------
+            if save_images:
+                img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
+                img = img.clone().detach().cpu().numpy()
+                queue.put({'idx': curr_seed_idxes,
+                            'img': img,
+                            'dir': os.path.join(outdir, 'images')
+                            })
+            
+            # ----------------------------------------------------------------------------
+            # Save the arrays
+            # ----------------------------------------------------------------------------
+            for k in ALL_DICT:
+                valid_len = k[1].shape[-1]
+                data = np.ones((len(curr_seed_idxes), 512), dtype=np.float32)
+                data[:, :valid_len] = k[1].numpy()
+                _array[k[0]]['data'][curr_seed_idxes, :] = data
 
             
 
@@ -354,7 +365,9 @@ if __name__ == '__main__':
     @click.option('--outdir', help='Where to save the output images', type=str, required=True, metavar='DIR')
     @click.option('--shapes', help='Export shapes as .mrc files viewable in ChimeraX', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
     @click.option('--shape-res', help='', type=int, required=False, metavar='int', default=512, show_default=True)
-    @click.option('--fov-deg', help='Field of View of camera in degrees', type=int, required=False, metavar='float', default=18.837, show_default=True)
+    @click.option('--fov-deg', help='Field of View of camera in degrees', type=float, required=False, metavar='float', default=18.837, show_default=True)
+    @click.option('--horizontal_stddev', help='The horizontal angle stddev', type=float, required=False, metavar='float', default=0.0, show_default=True)
+    @click.option('--vertical_stddev', help='The vertical angle stddev', type=float, required=False, metavar='float', default=0.0, show_default=True)
     @click.option('--shape-format', help='Shape Format', type=click.Choice(['.mrc', '.ply']), default='.mrc')
     @click.option('--lms_cond', help='If condition 2d landmarks?', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
     @click.option('--save_images', help='Whether to save the rendered images as well', type=bool, required=False, metavar='BOOL', default=True, show_default=True)
@@ -387,6 +400,8 @@ if __name__ == '__main__':
     num_samples: int,
     num_gpus: int,
     num_writers: int,
+    horizontal_stddev:float,
+    vertical_stddev:float,
     sample_cams: bool,
     sample_ids: bool,
     dataset_path: str,
@@ -405,6 +420,9 @@ if __name__ == '__main__':
             --network=ffhq-rebalanced-128.pkl
         """
         args = locals()
+        for k, v in args.items():
+            print(k, v)
+        click.confirm('Continue?', abort=True)
 
         # ----------------------------------------------------------------------------
         # Setup
@@ -531,7 +549,7 @@ if __name__ == '__main__':
             except:
                 pass
         with open(os.path.join(outdir, 'args.json'), 'w') as f:
-            json.dump(save_args, f)
+            json.dump(save_args, f, indent=4)
 
         # ----------------------------------------------------------------------------
         # Save the seeds

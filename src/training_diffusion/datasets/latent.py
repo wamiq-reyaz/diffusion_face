@@ -44,10 +44,22 @@ class WData(Dataset):
             self._min = torch.from_numpy(_min)
             self._range = torch.from_numpy(_range)
 
+        total = 2000000 - 128
+        per_gpu = total // 4
+        completed = 11300*32
+        starts = [0, per_gpu, per_gpu*2, per_gpu*3]
+        ends = [s+completed for s in starts]
+
+        self.idxes = []
+        for s,e in zip(starts, ends):
+            self.idxes += list(range(s,e))
+
+
     def __len__(self):
-        return 500000 # TODO: change to accept this from cfg
+        return len(self.idxes) # TODO: change to accept this from cfg
 
     def __getitem__(self, idx):
+        idx = self.idxes[idx]
         _name = str(idx).zfill(7)
         if not os.path.exists(os.path.join(self.w_path, _name + '.npy')) or \
             not os.path.exists(os.path.join(self.img_path, _name + '.png')):

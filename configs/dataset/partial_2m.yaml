@@ -1,0 +1,21 @@
+name: w_plus_img_cams_ids_0.7_2m_final
+path: ${env.datasets_dir}/${dataset.name}
+w_path: /ibex/ai/project/c2176/animation_gan/data/w_plus_img_cams_ids_0.7_2m_final/samples
+img_path: ${dataset.path}/images
+stats_path: /ibex/ai/home/parawr/Projects/diffusion/data/w_plus_img_cams_ids_0.7_500k_final/stats.pt
+base_seq_len: 73
+padding: [23,0]
+
+# Default parameters
+image_size: 256
+normalize_w: True
+normalize_image: True
+
+# TODO:
+# FFHQ parameters
+real_img_path: ${env.datasets_dir}/ffhq_512_posed_eg3d
+real_mesh_path: ${env.datasets_dir}/ffhq_512_posed_eg3d/deca_results_unposed
+
+# When used with slurm, this will take the dataset from `path_for_slurm_job`
+# and will copy it into the `path` location
+path_for_slurm_job: ${env.datasets_dir}/${dataset.name}

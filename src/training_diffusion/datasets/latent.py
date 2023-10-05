@@ -46,8 +46,8 @@ class WData(Dataset):
 
         total = 2000000 - 128
         per_gpu = total // 4
-        completed = 11300*32
-        starts = [0, per_gpu, per_gpu*2, per_gpu*3]
+        completed = 210000
+        starts = [0, 499968, 999936, 1499904]
         ends = [s+completed for s in starts]
 
         self.idxes = []
@@ -99,7 +99,8 @@ class WData(Dataset):
 
         return {'data': data,
                 'condition': img,
-                'idx': torch.tensor(idx, dtype=torch.int32).view(1)}
+                'idx': torch.tensor(idx, dtype=torch.int32).view(1),
+                'name': _name}
 
 
 

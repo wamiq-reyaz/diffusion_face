@@ -89,7 +89,7 @@ if __name__ == '__main__':
             os.makedirs(args['outdir'], exist_ok=True)
 
             writers = []
-            for rank in range(8):
+            for rank in range(16):
                 writers.append(mp.Process(target=consumer_proxy, args=(rank, args)))
                 writers[-1].start()
             print('Writers started')

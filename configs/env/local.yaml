@@ -1,0 +1,4 @@
+python_bin: ${env.project_path}/env/bin/python
+project_path: /datawaha/cggroup/parawr/Projects/diffusion/code
+datasets_dir: /datawaha/cggroup/parawr/Projects/diffusion/data
+results_dir: /datawaha/cggroup/parawr/Projects/diffusion/experiments

@@ -1,0 +1,15 @@
+python_bin: ${env.project_path}/env/bin/python
+before_train_commands: []
+torch_extensions_dir: "/tmp/torch_extensions"
+objects_to_copy:
+  - ${env.project_path}/configs
+  - ${env.project_path}/scripts
+  - ${env.project_path}/src
+# A list of objects that are static and too big to be cloned for each experiment
+symlinks_to_create:
+  - ${env.project_path}/pretrained_models
+  - ${env.project_path}/dataset_preprocessing
+tmp_dir: "/tmp"
+datasets_dir: /ibex/ai/home/parawr/Projects/diffusion/data
+results_dir: /ibex/ai/home/parawr/Projects/diffusion/experiments
+slurm_constraint: null

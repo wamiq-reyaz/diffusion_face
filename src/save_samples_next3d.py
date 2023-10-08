@@ -497,7 +497,7 @@ if __name__ == '__main__':
         # ----------------------------------------------------------------------------
         # Create the queue
         # ----------------------------------------------------------------------------
-        queue = mp.Queue()
+        queue = mp.Queue(maxsize=10000)
         args['queue'] = queue
 
         # ----------------------------------------------------------------------------
@@ -508,75 +508,77 @@ if __name__ == '__main__':
             writers.append(mp.Process(target=writer, args=(ii, queue)))
             writers[-1].start()
         print('Writers started')
+        try:
 
-        # ----------------------------------------------------------------------------
-        # Create the producder processes
-        # ----------------------------------------------------------------------------
-        with tempfile.TemporaryDirectory() as temp_dir:
-            args['temp_dir'] = temp_dir
-            args['world_size'] = torch.cuda.device_count()
-            for k in args:
-                if k != 'seeds':
-                    print(k, args[k])
-            if args['world_size'] == 1:
-                print('Running on single GPU')
-                proxy(rank=0, args=args)
-            else:
-                print(f'Running on {args["world_size"]} GPUs')
-                mp.spawn(fn=proxy, args=(args,), nprocs=args['world_size'], join=True)
+            # ----------------------------------------------------------------------------
+            # Create the producder processes
+            # ----------------------------------------------------------------------------
+            with tempfile.TemporaryDirectory() as temp_dir:
+                args['temp_dir'] = temp_dir
+                args['world_size'] = torch.cuda.device_count()
+                for k in args:
+                    if k != 'seeds':
+                        print(k, args[k])
+                if args['world_size'] == 1:
+                    print('Running on single GPU')
+                    proxy(rank=0, args=args)
+                else:
+                    print(f'Running on {args["world_size"]} GPUs')
+                    mp.spawn(fn=proxy, args=(args,), nprocs=args['world_size'], join=True)
 
-        # ----------------------------------------------------------------------------
-        # Kill the writers
-        # ----------------------------------------------------------------------------
-        print('Producer done, killing writers')
-        for ii in range(100*num_writers):
-            queue.put({'idx': None, 'img': None, 'dir': None})
-        for w in writers:
-            w.join()
-        print('Writers done')
+            # ----------------------------------------------------------------------------
+            # Kill the writers
+            # ----------------------------------------------------------------------------
+            print('Producer done, killing writers')
+            for ii in range(100*num_writers):
+                queue.put({'idx': None, 'img': None, 'dir': None})
+            for w in writers:
+                w.join()
+            print('Writers done')
 
-        queue.close()
-        print('Queue closed')
+        finally:
+            queue.close()
+            print('Queue closed')
 
-        # ----------------------------------------------------------------------------
-        # Save the arguments
-        # ----------------------------------------------------------------------------
-        save_args = {k:v for k,v in args.items() if k != 'seeds'}
-        for k, v in save_args.items():
-            try:
-                v = str(v)
-                save_args[k] = v
-            except:
-                pass
-        with open(os.path.join(outdir, 'args.json'), 'w') as f:
-            json.dump(save_args, f, indent=4)
+            # ----------------------------------------------------------------------------
+            # Save the arguments
+            # ----------------------------------------------------------------------------
+            save_args = {k:v for k,v in args.items() if k != 'seeds'}
+            for k, v in save_args.items():
+                try:
+                    v = str(v)
+                    save_args[k] = v
+                except:
+                    pass
+            with open(os.path.join(outdir, 'args.json'), 'w') as f:
+                json.dump(save_args, f, indent=4)
 
-        # ----------------------------------------------------------------------------
-        # Save the seeds
-        # ----------------------------------------------------------------------------
-        with open(os.path.join(outdir, 'seeds.pkl'), 'wb') as f:
-            pickle.dump(seeds, f)
+            # ----------------------------------------------------------------------------
+            # Save the seeds
+            # ----------------------------------------------------------------------------
+            with open(os.path.join(outdir, 'seeds.pkl'), 'wb') as f:
+                pickle.dump(seeds, f)
 
-        # ----------------------------------------------------------------------------
-        # Save the zarr array
-        # ----------------------------------------------------------------------------
-        main_group.attrs['seeds'] = seeds
-        main_group.attrs['num_samples'] = num_samples
-        main_group.attrs['num_writers'] = num_writers
-        main_group.attrs['num_gpus'] = num_gpus
+            # ----------------------------------------------------------------------------
+            # Save the zarr array
+            # ----------------------------------------------------------------------------
+            main_group.attrs['seeds'] = seeds
+            main_group.attrs['num_samples'] = num_samples
+            main_group.attrs['num_writers'] = num_writers
+            main_group.attrs['num_gpus'] = num_gpus
 
-        # ----------------------------------------------------------------------------
-        # Flush to disk
-        # ----------------------------------------------------------------------------
-        if lmdb:
-            store.flush()
-            store.close()
-        print('Store flushed to disk')
+            # ----------------------------------------------------------------------------
+            # Flush to disk
+            # ----------------------------------------------------------------------------
+            if lmdb:
+                store.flush()
+                store.close()
+            print('Store flushed to disk')
 
-        # ----------------------------------------------------------------------------
-        # End
-        # ----------------------------------------------------------------------------
-        print('Done')
+            # ----------------------------------------------------------------------------
+            # End
+            # ----------------------------------------------------------------------------
+            print('Done')
 
     # ----------------------------------------------------------------------------
 

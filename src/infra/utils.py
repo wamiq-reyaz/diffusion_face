@@ -9,7 +9,7 @@ from typing import List, Optional
 from hydra.utils import instantiate
 import click
 import git
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 
 #----------------------------------------------------------------------------
@@ -191,3 +191,24 @@ def linspace(val_from: float, val_to: float, num_steps: int) -> List[float]:
     return [val_from + (val_to - val_from) * i / (num_steps - 1) for i in range(num_steps)]
 
 #----------------------------------------------------------------------------
+
+def diffusion_length_resolver(base_seq_len: int,
+                            padding: List[int],
+                            cond_seq_len: int,
+                            condition_is_attention: bool,) -> int:
+    """
+    Computes the sequence length for the diffusion process, depending on the
+    type of conditioning.
+    """
+    diff_len = 0
+    diff_len += base_seq_len
+    diff_len += sum(padding)
+    if not condition_is_attention:
+        diff_len += cond_seq_len
+
+    return diff_len
+
+#----------------------------------------------------------------------------
+
+if __name__ == '__main__':
+    print(diffusion_length_resolver(64, [1, 0], 64, True))

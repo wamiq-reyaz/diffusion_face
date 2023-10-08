@@ -8,6 +8,9 @@ import random
 import hydra
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
+from infra.utils import diffusion_length_resolver
+OmegaConf.register_new_resolver(name='diffusion_length_resolver',
+                                resolver=diffusion_length_resolver)
 import torch
 
 from training_diffusion.builder import ModelBuilder

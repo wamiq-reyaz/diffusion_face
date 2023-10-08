@@ -15,7 +15,9 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from pathlib import Path
 
-from src.infra.utils import create_project_dir, recursive_instantiate
+from src.infra.utils import create_project_dir, recursive_instantiate, diffusion_length_resolver
+OmegaConf.register_new_resolver(name='diffusion_length_resolver',
+                                resolver=diffusion_length_resolver)
 
 #----------------------------------------------------------------------------
 

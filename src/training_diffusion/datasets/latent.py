@@ -46,9 +46,9 @@ class WData(Dataset):
 
         total = 2000000 - 128
         per_gpu = total // 4
-        completed = 210000
+        completeds = [210000, 210000, 210000, 130000]
         starts = [0, 499968, 999936, 1499904]
-        ends = [s+completed for s in starts]
+        ends = [s+c for s,c in zip(starts, completeds)]
 
         self.idxes = []
         for s,e in zip(starts, ends):

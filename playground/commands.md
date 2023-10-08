@@ -86,3 +86,11 @@ training.workers=4 training.per_gpu_batch_size=32 \
 num_gpus=1 sbatch_args.time="01:00:00"  sbatch_args.mem.mem_per_gpu=16 
 ```
 
+``` bash
+python src/infra/launch.py slurm=True training.resume=False \
+dataset=partial_2m \
+experiment_name=rgb_conditional_seq_v_unet_2m_500k_fulltime_ema_sattn_cattn_no_clip_noautonorm \
+model=base  \
+diffusion.auto_normalize=False  \
+dataset.normalize_w=False
+```

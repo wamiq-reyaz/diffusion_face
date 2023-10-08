@@ -131,16 +131,15 @@ class BaseTrainer:
         self.test_loader = model_builder.get_test_loader()
         self.optimizer = self.init_optimizer()
         self.scheduler = self.init_scheduler()
+        self.ema = None
         if self.rank == 0:
             if self.cfg.training.get('ema', False):
-                self.ema = EMA(self.model,
+                self.ema = EMA(self.model.module if self.cfg.num_gpus > 1 else self.model,
                                 beta=self.cfg.training.ema_beta,
                                 update_every=self.cfg.training.ema_update_every,
                                 update_after_step=self.cfg.training.ema_update_after_step
                             ).cuda()
-            else:
-                self.ema = None
-
+    
     def resize_to_target(self, prediction, target):
         if prediction.shape[2:] != target.shape[-2:]:
             prediction = nn.functional.interpolate(

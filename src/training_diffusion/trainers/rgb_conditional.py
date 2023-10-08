@@ -80,8 +80,8 @@ class Trainer(BaseTrainer):
 
     def train_on_batch(self, batch, train_step):
         self.optimizer.zero_grad()
-        condition = self.conditioner(batch['condition'])
-        loss = self.model(batch['data'], condition=condition) 
+        condition = self.conditioner(batch['condition'].cuda())
+        loss = self.model(batch['data'].cuda(), condition=condition) 
         for k, v in loss.items():
             loss[k].backward()
         # perform gradient clipping
@@ -98,9 +98,12 @@ class Trainer(BaseTrainer):
         else:
             m = self.model
 
-        m = self.ema if self.ema else m
+        m = self.ema.ema_model if self.ema else m
 
-        latents = m.ddim_sample(batch['data'].shape, condition=condition)
+        # We clip the latents only if we are using the auto-normalized diffusion
+        latents = m.ddim_sample(batch['data'].shape,
+                                condition=condition,
+                                clip_denoised=self.cfg.diffusion.auto_normalize)
         mse = torch.mean((latents - batch['data'].cuda())**2)
         return {'mse': mse}, {'mse': mse}
 

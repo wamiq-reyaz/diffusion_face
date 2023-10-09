@@ -1,4 +1,4 @@
-seq_length: 96
+seq_length: ${diffusion_length_resolver:${dataset.base_seq_len},${dataset.padding},${conditioner.seq_length},${model.condition_is_attention}}
 timesteps: 1000
 sampling_timesteps: 100
 objective: 'pred_v'

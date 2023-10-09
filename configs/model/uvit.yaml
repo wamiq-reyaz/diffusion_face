@@ -1,8 +1,8 @@
 name: uvit
 extras: 256 # the image features
 len_latents: 73 # the length of the latents
-embed_dim: 256
-depth: 8
+embed_dim: 512
+depth: 12
 num_heads: 8
 mlp_ratio: 4.0
 qkv_bias: false

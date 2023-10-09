@@ -24,7 +24,7 @@ sbatch_args:
   mem:
     _target_: src.infra.utils.num_gpus_to_mem
     num_gpus: ${num_gpus}
-    mem_per_gpu: 64
+    mem_per_gpu: 48
   cpus-per-gpu: 8
   reservation: "A100"
   account: conf-cvpr-2023.11.17-wonkap

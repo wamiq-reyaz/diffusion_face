@@ -11,8 +11,12 @@ learned_sinusoidal_cond: False
 random_fourier_features: False
 learned_sinusoidal_dim: 16
 
+# padding
+pad_in_model: 23
+
 
 is_conditional: true
 add_condition: false
 scale_condition: true
+condition_is_attention: false
 

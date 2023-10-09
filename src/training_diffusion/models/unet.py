@@ -13,6 +13,8 @@ import torch.nn.functional as F
 
 from einops import rearrange, reduce
 from einops.layers.torch import Rearrange
+from xformers.components.attention import ScaledDotProduct
+
 
 # helpers functions
 
@@ -75,9 +77,9 @@ class PreNorm(nn.Module):
         self.fn = fn
         self.norm = LayerNorm(dim)
 
-    def forward(self, x):
+    def forward(self, x, *args, **kwargs):
         x = self.norm(x)
-        return self.fn(x)
+        return self.fn(x, *args, **kwargs)
 
 # sinusoidal positional embeds
 
@@ -157,8 +159,8 @@ class ResnetBlock(nn.Module):
         h = self.block2(h)
 
         return h + self.res_conv(x)
-
-class LinearAttention(nn.Module):
+    
+class LinearAttention_S(nn.Module):
     def __init__(self, dim, heads = 4, dim_head = 32):
         super().__init__()
         self.scale = dim_head ** -0.5
@@ -187,7 +189,66 @@ class LinearAttention(nn.Module):
         out = rearrange(out, 'b h c n -> b (h c) n', h = self.heads)
         return self.to_out(out)
 
+class LinearAttention(nn.Module):
+    def __init__(self, dim, heads = 4, dim_head = 32):
+        super().__init__()
+        self.scale = dim_head ** -0.5
+        self.heads = heads
+        hidden_dim = dim_head * heads
+        # self.to_qkv = nn.Conv1d(dim, hidden_dim * 3, 1, bias = False)
+        self.to_kv = nn.Conv1d(dim, hidden_dim * 2, 1, bias = False)
+        self.to_q = nn.Conv1d(dim, hidden_dim, 1, bias = False)
+
+        self.to_out = nn.Sequential(
+            nn.Conv1d(hidden_dim, dim, 1),
+            LayerNorm(dim)
+        )
+
+    def forward(self, x, c):
+        b, e, s = x.shape
+        kv = self.to_kv(c).chunk(2, dim = 1)
+        q = self.to_q(x)
+        q, v, k = map(lambda t: rearrange(t, 'b (h c) n -> b h c n', h = self.heads), (q,) + (kv))
+
+        q = q.softmax(dim = -2)
+        k = k.softmax(dim = -1)
+
+        q = q * self.scale        
+
+        context = torch.einsum('b h d n, b h e n -> b h d e', k, v)
+
+        out = torch.einsum('b h d e, b h d n -> b h e n', context, q)
+        out = rearrange(out, 'b h c n -> b (h c) n', h = self.heads)
+        return self.to_out(out)
+
 class Attention(nn.Module):
+    def __init__(self, dim, heads = 4, dim_head = 32):
+        super().__init__()
+        self.scale = dim_head ** -0.5
+        self.heads = heads
+        hidden_dim = dim_head * heads
+
+        # self.to_qkv = nn.Conv1d(dim, hidden_dim * 3, 1, bias = False)
+        self.to_kv = nn.Conv1d(dim, hidden_dim * 2, 1, bias = False)
+        self.to_q = nn.Conv1d(dim, hidden_dim, 1, bias = False)
+        self.to_out = nn.Conv1d(hidden_dim, dim, 1)
+
+    def forward(self, x, c):
+        b, e, s = x.shape
+        kv = self.to_kv(c).chunk(2, dim = 1)
+        q = self.to_q(x)
+        q, v, k = map(lambda t: rearrange(t, 'b (h c) n -> b h c n', h = self.heads), (q,) + (kv))
+
+        q = q * self.scale
+
+        sim = einsum('b h d i, b h d j -> b h i j', q, k)
+        attn = sim.softmax(dim = -1)
+        out = einsum('b h i j, b h d j -> b h i d', attn, v)
+
+        out = rearrange(out, 'b h n d -> b (h d) n')
+        return self.to_out(out)
+    
+class Attention_S(nn.Module):
     def __init__(self, dim, heads = 4, dim_head = 32):
         super().__init__()
         self.scale = dim_head ** -0.5
@@ -213,6 +274,72 @@ class Attention(nn.Module):
 
 # model
 
+# class LinearAttention(nn.Module):
+#     def __init__(self, dim, heads=4, dim_head=32):
+#         super().__init__()
+
+#         self.heads = heads
+#         hidden_dim = dim_head * heads
+#         self.to_qkv = nn.Conv1d(dim, hidden_dim * 3, 1, bias=False)
+
+#         self.attention = ScaledDotProduct(dropout=0.0, causal=False, seq_len=None, to_seq_len=None)
+
+#         self.to_out = nn.Sequential(
+#             nn.Conv1d(hidden_dim, dim, 1),
+#             Rearrange('b e s -> b s e'),
+#             nn.LayerNorm(dim)
+#         )
+
+#     def forward(self, x):
+#         b, e, s = x.shape
+#         qkv = self.to_qkv(x).chunk(3, dim=1)
+#         q, k, v = map(lambda t: rearrange(t, 'b (h c) n -> b h c n', h=self.heads), qkv)
+
+#         context = self.attention(q, k, v)
+
+#         out = rearrange(context, 'b h c n -> b (h c) n') # out: b, e, s
+#         out = self.to_out(out)
+#         out = rearrange(out, 'b e s -> b s e')
+#         return out
+
+
+#         qkv = self.to_qkv(x).chunk(3, dim = 1)
+#         q, k, v = map(lambda t: rearrange(t, 'b (h c) n -> b h c n', h = self.heads), qkv)
+
+#         q = q * self.scale
+
+#         sim = einsum('b h d i, b h d j -> b h i j', q, k)
+#         attn = sim.softmax(dim = -1)
+#         out = einsum('b h i j, b h d j -> b h i d', attn, v)
+
+#         out = rearrange(out, 'b h n d -> b (h d) n')
+#         return self.to_out(out)
+
+# class Attention(nn.Module):
+#     def __init__(self, dim, heads=4, dim_head=32):
+#         super().__init__()
+
+#         self.heads = heads
+#         hidden_dim = dim_head * heads
+#         self.to_qkv = nn.Conv1d(dim, hidden_dim * 3, 1, bias=False)
+
+#         self.attention = ScaledDotProduct(dropout=0.0, causal=False, seq_len=None, to_seq_len=None)
+
+#         self.to_out = nn.Conv1d(hidden_dim, dim, 1)
+
+#     def forward(self, x):
+#         b, e, s = x.shape
+#         qkv = self.to_qkv(x).chunk(3, dim=1)
+#         q, k, v = map(lambda t: rearrange(t, 'b (h c) s -> b h c s', h=self.heads), qkv)
+
+#         context = self.attention(q, k, v)
+
+#         out = rearrange(context, 'b h c s -> b (h c) s')
+#         out = self.to_out(out)
+#         out = rearrange(out, 'b e s -> b s e')
+#         return out
+
+
 class Unet1D(nn.Module):
     def __init__(
         self,
@@ -231,6 +358,7 @@ class Unet1D(nn.Module):
         is_conditional=False,
         add_condition=False,
         scale_condition=False,
+        pad_in_model=False
     ):
         super().__init__()
         self.cfg = cfg
@@ -241,6 +369,7 @@ class Unet1D(nn.Module):
         self.channels = channels
         self.self_condition = self_condition
         self.scale_condition = scale_condition
+        self.pad_in_model = pad_in_model
         input_channels = channels * (2 if self_condition else 1)
 
         init_dim = default(init_dim, dim)
@@ -276,21 +405,29 @@ class Unet1D(nn.Module):
 
         self.downs = nn.ModuleList([])
         self.ups = nn.ModuleList([])
+        self.down_projectors = nn.ModuleList([])
+        self.up_projectors = nn.ModuleList([])
         num_resolutions = len(in_out)
 
+        # print(in_out)
         for ind, (dim_in, dim_out) in enumerate(in_out):
             is_last = ind >= (num_resolutions - 1)
 
             self.downs.append(nn.ModuleList([
                 block_klass(dim_in, dim_in, time_emb_dim = time_dim),
                 block_klass(dim_in, dim_in, time_emb_dim = time_dim),
+                Residual(PreNorm(dim_in, LinearAttention_S(dim_in))),
                 Residual(PreNorm(dim_in, LinearAttention(dim_in))),
                 Downsample(dim_in, dim_out) if not is_last else nn.Conv1d(dim_in, dim_out, 3, padding = 1)
             ]))
+            
+            self.down_projectors.append(nn.Conv1d(self.channels, dim_in, 1))
 
         mid_dim = dims[-1]
         self.mid_block1 = block_klass(mid_dim, mid_dim, time_emb_dim = time_dim)
+        self.mid_attn0 = Residual(PreNorm(mid_dim, Attention_S(mid_dim)))
         self.mid_attn = Residual(PreNorm(mid_dim, Attention(mid_dim)))
+        self.mid_projector = nn.Conv1d(self.channels, mid_dim, 1)
         self.mid_block2 = block_klass(mid_dim, mid_dim, time_emb_dim = time_dim)
 
         for ind, (dim_in, dim_out) in enumerate(reversed(in_out)):
@@ -299,9 +436,11 @@ class Unet1D(nn.Module):
             self.ups.append(nn.ModuleList([
                 block_klass(dim_out + dim_in, dim_out, time_emb_dim = time_dim),
                 block_klass(dim_out + dim_in, dim_out, time_emb_dim = time_dim),
+                Residual(PreNorm(dim_out, LinearAttention_S(dim_out))),
                 Residual(PreNorm(dim_out, LinearAttention(dim_out))),
                 Upsample(dim_out, dim_in) if not is_last else  nn.Conv1d(dim_out, dim_in, 3, padding = 1)
             ]))
+            self.up_projectors.append(nn.Conv1d(self.channels, dim_out, 1))
 
         default_out_dim = channels * (1 if not learned_variance else 2)
         self.out_dim = default(out_dim, default_out_dim)
@@ -312,41 +451,50 @@ class Unet1D(nn.Module):
     def forward(self, x, time, x_self_cond = None, condition=None):
         t = self.time_mlp(time)
        
-        if self.is_conditional:
-            len_added_tokens = condition.shape[-1]
-            if self.scale_condition:
-                condition = condition * (t[:, :self.channels, None] + 1)
-                condition = condition + t[:, self.channels:2*self.channels, None]
-            x = torch.cat([x, condition], dim=-1)
-            if self.add_condition:
-                x = x + condition # assume dim 1
+        # if self.is_conditional:
+        #     len_added_tokens = condition.shape[-1]
+        #     if self.scale_condition:
+        #         condition = condition * (t[:, :self.channels, None] + 1)
+        #         condition = condition + t[:, self.channels:2*self.channels, None]
+        #     x = torch.cat([x, condition], dim=-1)
+        #     if self.add_condition:
+        #         x = x + condition # assume dim 1
 
+        if self.pad_in_model > 0:
+            x = F.pad(x, (self.pad_in_model, 0), mode='constant', value=0.0)
         x = self.init_conv(x)
         r = x.clone()
 
         h = []
 
-        for block1, block2, attn, downsample in self.downs:
+        for ii, (block1, block2, sattn, attn, downsample) in enumerate(self.downs):
             x = block1(x, t)
             h.append(x)
 
             x = block2(x, t)
-            x = attn(x)
+            c = self.down_projectors[ii](condition)
+            # print(ii, x.shape, c.shape)\
+            x = sattn(x)
+            x = attn(x, c=c)
             h.append(x)
 
             x = downsample(x)
 
         x = self.mid_block1(x, t)
-        x = self.mid_attn(x)
+        c = self.mid_projector(condition)
+        x = self.mid_attn0(x)
+        x = self.mid_attn(x, c=c)
         x = self.mid_block2(x, t)
 
-        for block1, block2, attn, upsample in self.ups:
+        for ii, (block1, block2, sattn, attn, upsample) in enumerate(self.ups):
             x = torch.cat((x, h.pop()), dim = 1)
             x = block1(x, t)
 
             x = torch.cat((x, h.pop()), dim = 1)
             x = block2(x, t)
-            x = attn(x)
+            c = self.up_projectors[ii](condition)
+            x = sattn(x)
+            x = attn(x, c=c)
 
             x = upsample(x)
 
@@ -354,7 +502,10 @@ class Unet1D(nn.Module):
 
         x = self.final_res_block(x, t)
         x = self.final_conv(x)
-        if self.is_conditional:
-            x = x[:, :, :-len_added_tokens] # remove the added tokens
+        # if self.is_conditional:
+        #     x = x[:, :, :-len_added_tokens] # remove the added tokens
+
+        if self.pad_in_model > 0:
+            x = x[:, :, self.pad_in_model:]
 
         return x

@@ -10,6 +10,8 @@ padding: [23,0]
 image_size: 256
 normalize_w: True
 normalize_image: True
+w_norm_type: min_max
+z_scaler: 1.0
 
 # TODO:
 # FFHQ parameters

@@ -211,4 +211,4 @@ def diffusion_length_resolver(base_seq_len: int,
 #----------------------------------------------------------------------------
 
 if __name__ == '__main__':
-    print(diffusion_length_resolver(64, [1, 0], 64, True))
+    print(diffusion_length_resolver(64, [0, 0], 64, True))

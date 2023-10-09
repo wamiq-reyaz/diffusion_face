@@ -103,7 +103,7 @@ class Trainer(BaseTrainer):
         # We clip the latents only if we are using the auto-normalized diffusion
         latents = m.ddim_sample(batch['data'].shape,
                                 condition=condition,
-                                clip_denoised=self.cfg.diffusion.auto_normalize)
+                                clip_denoised=True)
         mse = torch.mean((latents - batch['data'].cuda())**2)
         return {'mse': mse}, {'mse': mse}
 

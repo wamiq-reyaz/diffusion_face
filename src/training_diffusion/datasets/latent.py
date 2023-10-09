@@ -20,7 +20,9 @@ class WData(Dataset):
                 image_size=(256,256),
                 padding=(0,0),
                 normalize_w=True,
-                normalize_image=True,):
+                normalize_image=True,
+                w_norm_type='min_max',
+                z_scaler=1.0):
 
         self.cfg = cfg
         self.w_path = w_path
@@ -28,6 +30,8 @@ class WData(Dataset):
         self.stats_path = stats_path
         self.normalize_w = normalize_w
         self.normalize_image = normalize_image
+        self.w_norm_type = w_norm_type
+        self.z_scaler = z_scaler
 
         _p = [int(p) for p in padding]
         self.padding = _p
@@ -43,6 +47,13 @@ class WData(Dataset):
             _range[_range == 0] = 1.
             self._min = torch.from_numpy(_min)
             self._range = torch.from_numpy(_range)
+
+            if self.w_norm_type == 'z_norm':
+                self._mean = torch.from_numpy(stats['mean'].numpy())
+                self._std = torch.from_numpy(stats['std'].numpy())
+                self._std[self._std == 0] = 1.
+                # z_scaler ensures that returned values are in the range of [-1, 1]
+                self._std = self._std * self.z_scaler
 
         total = 2000000 - 128
         per_gpu = total // 4
@@ -67,8 +78,14 @@ class WData(Dataset):
         data = np.load(os.path.join(self.w_path, _name + '.npy'))
         data = torch.from_numpy(data).float() # SxE
         if self.normalize_w:
-            data = data - self._min
-            data = data / self._range
+            if self.w_norm_type == 'z_norm':
+                data = data - self._mean
+                data = data / self._std
+            elif self.w_norm_type == 'min_max':
+                data = data - self._min
+                data = data / self._range
+            else:
+                raise NotImplementedError
 
         if self.padding[0] + self.padding[1] > 0:
             data = torch.nn.functional.pad(data, (0, 0, self.padding[0], self.padding[1]), mode='constant', value=0)

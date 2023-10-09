@@ -21,6 +21,7 @@ def get_model(cfg: DictConfig):
                         random_fourier_features=cfg.model.random_fourier_features,
                         learned_sinusoidal_dim=cfg.model.learned_sinusoidal_dim,
                         scale_condition=cfg.model.scale_condition,
+                        pad_in_model=cfg.model.pad_in_model,
                         )
     elif cfg.model.name == 'uvit':
         return UViT( cfg=cfg,

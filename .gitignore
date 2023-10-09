@@ -29,6 +29,8 @@ output/slurm
 **.pkl
 **.mtl
 
+**.pt
+
 # data related
 data/obama
 data/obama.zip

@@ -130,12 +130,15 @@ def set_fwd_hook(generator: torch.nn.Module) -> List:
     return all_hooks
 
 
-def set_replacement_hook(generator: torch.nn.Module, names, tensors) -> List:
+def set_replacement_hook(generator: torch.nn.Module, names, tensors, batched=False) -> List:
     all_hooks = []
     for ii, name in enumerate(names):
         for modname, module in generator.named_modules():
             if modname == name:
-                mod_hook = partial(replace_hook, name, tensors[ii:ii+1, ...])
+                if not batched:
+                    mod_hook = partial(replace_hook, name, tensors[ii:ii+1, ...])
+                else:
+                    mod_hook = partial(replace_hook, name, tensors[:, ii, ...])
                 hook = module.register_forward_hook(mod_hook)
                 all_hooks.append(hook)
     

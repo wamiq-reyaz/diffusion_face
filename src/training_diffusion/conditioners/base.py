@@ -18,11 +18,9 @@ class Conditioner(nn.Module):
 
         self.suffix = nn.Sequential(
             nn.Conv2d(self.cfg.conditioner.backbone_dim, 512, 1, 1),
-            nn.ReLU(),
             nn.BatchNorm2d(512),
             nn.ReLU(),
             nn.Conv2d(512, 512, 1, 1),
-            nn.ReLU(),
             nn.BatchNorm2d(512),
             nn.ReLU(),
             nn.Conv2d(512, cfg.model.dim, 1, 1),

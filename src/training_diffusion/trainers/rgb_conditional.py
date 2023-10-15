@@ -10,6 +10,16 @@ import wandb
 from tqdm import tqdm
 
 from .base_trainer import BaseTrainer
+from ..common import (
+                      create_network_from_pkl,
+                      generate_images,
+                      get_lookat_cam,
+                      get_vertices,
+                      set_replacement_hook,
+                      Unnormalizer,
+                      to_uint8,
+                      batch_to_PIL
+                     )
 
 class Trainer(BaseTrainer):
     def __init__(self,
@@ -33,6 +43,21 @@ class Trainer(BaseTrainer):
                 
         # metrics
         self.metric_criterion = 'mse'
+
+        # TODO: remove all hardcoding to inherit from config
+        self.stylegan = create_network_from_pkl(self.cfg.training.stylegan_path,
+                                                device='cpu',
+                                                reload_modules=False,
+                                                verbose=False)
+        self.unnormalizer = Unnormalizer(path=self.cfg.dataset.stats_path,
+                                         mode=self.cfg.dataset.w_norm_type)
+        self.verts = get_vertices(self.cfg.dataset.obj_path,
+                                  self.cfg.dataset.lms_path,
+                                  self.cfg.dataset.lms_cond,
+                                  device='cpu')
+        self.cams = get_lookat_cam()
+        self.gen_fn = generate_images
+
 
     def load_ckpt(self, checkpoint_dir="./checkpoints", ckpt_type="best"):
         _dir = os.path.join(self.cfg.experiment_dir, checkpoint_dir)
@@ -88,7 +113,8 @@ class Trainer(BaseTrainer):
         if self.cfg.training.clip_grad_norm > 0:
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.cfg.training.clip_grad_norm)
             torch.nn.utils.clip_grad_norm_(self.conditioner.parameters(), self.cfg.training.clip_grad_norm)
-        self.optimizer.step()
+        if (train_step % self.cfg.training.gradient_accumulation_steps == 0) and train_step > 0:
+            self.optimizer.step()
         return loss
         
     def validate_on_batch(self, batch, val_step):
@@ -105,7 +131,28 @@ class Trainer(BaseTrainer):
                                 condition=condition,
                                 clip_denoised=True)
         mse = torch.mean((latents - batch['data'].cuda())**2)
-        return {'mse': mse}, {'mse': mse}
+        images = self.gen_fn(G=self.stylegan,
+                            w=latents.clone().detach().cpu()[0:1].permute(0,2,1),
+                            v=self.verts,
+                            camera_params=self.cams,
+                            batched=True,
+                            unnormalizer=self.unnormalizer,
+                            device='cpu',
+                            )
+        images = torch.nn.functional.interpolate(images, size=(256,256))
+        images = to_uint8(images)
+
+        # denormalize the condition images with imagenet stats
+        condition = batch['condition'][0:1].clone().detach()
+        imagenet_mean = torch.tensor([0.485, 0.456, 0.406]).view(1,3,1,1).numpy()
+        imagenet_std = torch.tensor([0.229, 0.224, 0.225]).view(1,3,1,1).numpy()
+        condition = condition * imagenet_std + imagenet_mean
+        condition = (condition * 255).permute(0,2,3,1).numpy()
+
+        concat_images = np.concatenate([condition, images.cpu().numpy()], axis=1)
+        concat_images = concat_images.squeeze()
+            
+        return {'mse': mse}, {'mse': mse}, concat_images
 
     def save_checkpoint(self, filename):
         if not self.should_write:

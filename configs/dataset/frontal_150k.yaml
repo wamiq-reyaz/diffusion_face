@@ -1,0 +1,23 @@
+name: w_plus_img_cams_ids_0.7_150k_frontal_final
+path: ${env.datasets_dir}/${dataset.name}
+w_path: ${dataset.path}/samples2
+img_path: ${dataset.path}/images
+stats_path: ${dataset.path}/stats.pt
+base_seq_len: 73
+padding: [23,0]
+
+# Default parameters
+image_size: 256
+normalize_w: True
+normalize_image: True
+w_norm_type: min_max
+z_scaler: 1.0
+
+# TODO:
+# FFHQ parameters
+real_img_path: /datawaha/cggroup/parawr/Projects/diffusion/all_data/ffhq_512_posed_eg3d
+real_mesh_path: /datawaha/cggroup/parawr/Projects/diffusion/all_data/ffhq_512_posed_eg3d/deca_results_unposed
+
+# When used with slurm, this will take the dataset from `path_for_slurm_job`
+# and will copy it into the `path` location
+path_for_slurm_job: ${env.datasets_dir}/${dataset.name}

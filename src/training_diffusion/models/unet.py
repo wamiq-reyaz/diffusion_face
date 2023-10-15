@@ -13,7 +13,7 @@ import torch.nn.functional as F
 
 from einops import rearrange, reduce
 from einops.layers.torch import Rearrange
-from xformers.components.attention import ScaledDotProduct
+# from xformers.components.attention import ScaledDotProduct
 
 
 # helpers functions
@@ -161,7 +161,7 @@ class ResnetBlock(nn.Module):
         return h + self.res_conv(x)
     
 class LinearAttention_S(nn.Module):
-    def __init__(self, dim, heads = 4, dim_head = 32):
+    def __init__(self, dim, heads = 8, dim_head = 64):
         super().__init__()
         self.scale = dim_head ** -0.5
         self.heads = heads
@@ -190,7 +190,7 @@ class LinearAttention_S(nn.Module):
         return self.to_out(out)
 
 class LinearAttention(nn.Module):
-    def __init__(self, dim, heads = 4, dim_head = 32):
+    def __init__(self, dim, heads = 8, dim_head = 64):
         super().__init__()
         self.scale = dim_head ** -0.5
         self.heads = heads
@@ -222,7 +222,7 @@ class LinearAttention(nn.Module):
         return self.to_out(out)
 
 class Attention(nn.Module):
-    def __init__(self, dim, heads = 4, dim_head = 32):
+    def __init__(self, dim, heads = 8, dim_head = 64):
         super().__init__()
         self.scale = dim_head ** -0.5
         self.heads = heads
@@ -249,7 +249,7 @@ class Attention(nn.Module):
         return self.to_out(out)
     
 class Attention_S(nn.Module):
-    def __init__(self, dim, heads = 4, dim_head = 32):
+    def __init__(self, dim, heads = 8, dim_head = 64):
         super().__init__()
         self.scale = dim_head ** -0.5
         self.heads = heads
@@ -417,7 +417,9 @@ class Unet1D(nn.Module):
                 block_klass(dim_in, dim_in, time_emb_dim = time_dim),
                 block_klass(dim_in, dim_in, time_emb_dim = time_dim),
                 Residual(PreNorm(dim_in, LinearAttention_S(dim_in))),
+                Residual(nn.Conv1d(dim_in, dim_in, 1, padding = 0)),
                 Residual(PreNorm(dim_in, LinearAttention(dim_in))),
+                # nn.Identity(),
                 Downsample(dim_in, dim_out) if not is_last else nn.Conv1d(dim_in, dim_out, 3, padding = 1)
             ]))
             
@@ -427,6 +429,9 @@ class Unet1D(nn.Module):
         self.mid_block1 = block_klass(mid_dim, mid_dim, time_emb_dim = time_dim)
         self.mid_attn0 = Residual(PreNorm(mid_dim, Attention_S(mid_dim)))
         self.mid_attn = Residual(PreNorm(mid_dim, Attention(mid_dim)))
+        # self.mid_attn = nn.Identity()
+        self.mid = Residual(nn.Conv1d(mid_dim, mid_dim, 1, padding = 0))
+
         self.mid_projector = nn.Conv1d(self.channels, mid_dim, 1)
         self.mid_block2 = block_klass(mid_dim, mid_dim, time_emb_dim = time_dim)
 
@@ -437,7 +442,9 @@ class Unet1D(nn.Module):
                 block_klass(dim_out + dim_in, dim_out, time_emb_dim = time_dim),
                 block_klass(dim_out + dim_in, dim_out, time_emb_dim = time_dim),
                 Residual(PreNorm(dim_out, LinearAttention_S(dim_out))),
+                Residual(nn.Conv1d(dim_out, dim_out, 1, padding = 0)),
                 Residual(PreNorm(dim_out, LinearAttention(dim_out))),
+                # nn.Identity(),
                 Upsample(dim_out, dim_in) if not is_last else  nn.Conv1d(dim_out, dim_in, 3, padding = 1)
             ]))
             self.up_projectors.append(nn.Conv1d(self.channels, dim_out, 1))
@@ -467,14 +474,14 @@ class Unet1D(nn.Module):
 
         h = []
 
-        for ii, (block1, block2, sattn, attn, downsample) in enumerate(self.downs):
+        for ii, (block1, block2, sattn, p, attn, downsample) in enumerate(self.downs):
             x = block1(x, t)
             h.append(x)
 
             x = block2(x, t)
             c = self.down_projectors[ii](condition)
-            # print(ii, x.shape, c.shape)\
             x = sattn(x)
+            x = p(x)
             x = attn(x, c=c)
             h.append(x)
 
@@ -483,10 +490,11 @@ class Unet1D(nn.Module):
         x = self.mid_block1(x, t)
         c = self.mid_projector(condition)
         x = self.mid_attn0(x)
+        x = self.mid(x)
         x = self.mid_attn(x, c=c)
         x = self.mid_block2(x, t)
 
-        for ii, (block1, block2, sattn, attn, upsample) in enumerate(self.ups):
+        for ii, (block1, block2, sattn, p, attn, upsample) in enumerate(self.ups):
             x = torch.cat((x, h.pop()), dim = 1)
             x = block1(x, t)
 
@@ -494,8 +502,8 @@ class Unet1D(nn.Module):
             x = block2(x, t)
             c = self.up_projectors[ii](condition)
             x = sattn(x)
+            x = p(x)
             x = attn(x, c=c)
-
             x = upsample(x)
 
         x = torch.cat((x, r), dim = 1)

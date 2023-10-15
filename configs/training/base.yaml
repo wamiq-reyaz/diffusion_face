@@ -13,19 +13,24 @@ final_div_factor: 1e4 # default value
 pct_start: 0.02 
 three_phase: false # default value
 lr: 0.0001
-clip_grad_norm: 0.0
+clip_grad_norm: 1.0
 
 # ema params
 ema: True
-ema_beta: 0.9999
+ema_beta: 0.995
 ema_update_every: 10
-ema_update_after_step: 10000
+ema_update_after_step: 0
+
+# gradient accumulation
+gradient_accumulation_steps: 1
+
+stylegan_path: /datawaha/cggroup/parawr/Projects/diff2/pretrained_models/next3d_ffhq_512.pkl
 
 # Misc settings.
 desc: null # String to include in result dir name
 metrics: fid2k_full,nfs256 # Quality metrics
 main_metric: __pick_first__ # Takes the first metric among `metrics` as the main one to compute the best checkpoint
-total_iter: 500000 # Total training duration
+total_iter: 200000 # Total training duration
 tick: 4 # How often to print progress
 val_freq: 5000 # How often to compute metrics
 snap: 5000 # How often to save snapshots

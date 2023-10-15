@@ -1,8 +1,8 @@
 name: w_plus_img_cams_ids_0.7_2m_final
 path: ${env.datasets_dir}/${dataset.name}
-w_path: /ibex/ai/project/c2176/animation_gan/data/w_plus_img_cams_ids_0.7_2m_final/samples
-img_path: ${dataset.path}/images
-stats_path: /ibex/ai/home/parawr/Projects/diffusion/data/w_plus_img_cams_ids_0.7_500k_final/stats.pt
+w_path: /datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_img_cams_ids_0.7_2m_final/samples
+img_path: /datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_img_cams_ids_0.7_2m_final/images
+stats_path: /datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_img_cams_ids_0.7_150k_frontal_final/stats.pt
 base_seq_len: 73
 padding: [23,0]
 

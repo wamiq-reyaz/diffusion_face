@@ -55,15 +55,17 @@ class WData(Dataset):
                 # z_scaler ensures that returned values are in the range of [-1, 1]
                 self._std = self._std * self.z_scaler
 
-        total = 2000000 - 128
-        per_gpu = total // 4
-        completeds = [210000, 210000, 210000, 130000]
-        starts = [0, 499968, 999936, 1499904]
-        ends = [s+c for s,c in zip(starts, completeds)]
+        # total = 2000000 - 128
+        # per_gpu = total // 4
+        # completeds = [210000, 210000, 210000, 130000]
+        # starts = [0, 499968, 999936, 1499904]
+        # ends = [s+c for s,c in zip(starts, completeds)]
 
-        self.idxes = []
-        for s,e in zip(starts, ends):
-            self.idxes += list(range(s,e))
+        # self.idxes = []
+        # for s,e in zip(starts, ends):
+            # self.idxes += list(range(s,e))
+
+        self.idxes = list(range(1999872))
 
 
     def __len__(self):

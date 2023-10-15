@@ -333,7 +333,7 @@ class GaussianDiffusion1D(nn.Module):
         return img
 
     @torch.no_grad()
-    def ddim_sample(self, shape, clip_denoised = True, condition=None, q_sample_idx=0, gt_elem=None, eta_steps=25):
+    def ddim_sample(self, shape, clip_denoised = True, condition=None, q_sample_idx=0, gt_elem=None, eta_steps=25, return_all=False):
         batch, device, total_timesteps, sampling_timesteps, eta, objective = shape[0], self.betas.device, self.num_timesteps, self.sampling_timesteps, self.ddim_sampling_eta, self.objective
 
         times = torch.linspace(-1, total_timesteps - 1, steps=sampling_timesteps + 1)   # [-1, 0, 1, 2, ..., T-1] when sampling_timesteps == total_timesteps
@@ -357,6 +357,7 @@ class GaussianDiffusion1D(nn.Module):
         x_start = None
 
         _iter = 0
+        all_rets = []
         for time, time_next in time_pairs:
             time_cond = torch.full((batch,), time, device=device, dtype=torch.long)
             self_cond = x_start if self.self_condition else None
@@ -379,6 +380,8 @@ class GaussianDiffusion1D(nn.Module):
             img = x_start * alpha_next.sqrt() + \
                   c * pred_noise + \
                   sigma * noise
+            if return_all:
+                all_rets.append(img)
             
             if q_sample_idx > 0:
                 # replace the element with the GT
@@ -389,6 +392,8 @@ class GaussianDiffusion1D(nn.Module):
             _iter += 1
 
         img = self.unnormalize(img)
+        if return_all:
+            return img, [self.unnormalize(a) for a in all_rets]
         return img
 
     @torch.no_grad()
@@ -530,7 +535,7 @@ class GaussianDiffusion1D(nn.Module):
         return loss.mean(), torch.clamp(pred_x_start, min=-1, max=1), extract(self.loss_weight, t, loss.shape)
 
     def forward(self, img, *args, **kwargs):
-        return img
+        raise NotImplementedError('use either forward_wo_latents or forward_w_latents')
 
     # TODO: monkey patch forward based on the instantiation.
     def forward_wo_latents(self, img, *args, **kwargs):

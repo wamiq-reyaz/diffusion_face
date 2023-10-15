@@ -15,6 +15,7 @@ import torch
 
 from training_diffusion.builder import ModelBuilder
 from training_diffusion.trainers.builder import get_trainer
+import wandb
 
 
 # ------------------------------------------------------------------------------
@@ -38,8 +39,14 @@ def subprocess_fn(rank, cfg, temp_dir):
     # Initialize the trainer
     trainer = get_trainer(cfg, model_builder, rank=rank)
 
-    # Start the training process
-    trainer.train()
+    try:
+        # Start the training process
+        trainer.train()
+    except Exception as e:
+        raise e
+    finally:
+        wandb.finish()
+
 
 # ------------------------------------------------------------------------------
 # Main function

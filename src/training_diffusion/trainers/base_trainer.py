@@ -18,6 +18,11 @@ import torch.optim as optim
 import wandb
 from tqdm import tqdm
 from ema_pytorch import EMA
+from torchvision.utils import make_grid
+
+
+IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32)
+IMAGENET_STD = torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32)
 
 class colors:
     '''Colors class:
@@ -139,13 +144,11 @@ class BaseTrainer:
                                 update_every=self.cfg.training.ema_update_every,
                                 update_after_step=self.cfg.training.ema_update_after_step
                             ).cuda()
-    
-    def resize_to_target(self, prediction, target):
-        if prediction.shape[2:] != target.shape[-2:]:
-            prediction = nn.functional.interpolate(
-                prediction, size=target.shape[-2:], mode="bilinear", align_corners=True
-            )
-        return prediction
+                
+        # ------------------------------------------------------------------------------------------------------
+        # Gradient accumulation setup
+        # ------------------------------------------------------------------------------------------------------
+        self.gradient_accumulation_steps = self.cfg.training.gradient_accumulation_steps
 
     def load_ckpt(self, checkpoint_dir="./checkpoints", ckpt_type="best"):
         import glob
@@ -207,7 +210,7 @@ class BaseTrainer:
         for k, v in loss.items():
             loss[k].backward()
         self.optimizer.step()
-        return loss 
+        return loss
     
     def validate_on_batch(self, batch, val_step):
         raise NotImplementedError # TODO: implement returning a dict of metrics and losses
@@ -244,6 +247,8 @@ class BaseTrainer:
         if self.should_log:
             wandb.init(project=self.cfg.project, name=self.experiment_id, config=cfg_to_log, dir=self.cfg.experiment_dir,
                        notes=self.cfg.notes, settings=wandb.Settings(start_method="fork"))
+            to_watch = [self.model] + [self.conditioner] if self.conditioner else []
+            wandb.watch(to_watch , log='all', log_graph=True, log_freq=1000)
 
         self.model.train()
         if self.conditioner:
@@ -266,9 +271,9 @@ class BaseTrainer:
             # Training loop
             # ------------------------------------------------------------------------------------------------------
 
-            batch = next(dloader)
-
-            losses = self.train_on_batch(batch, _iter)
+            for _ in range(self.gradient_accumulation_steps):
+                batch = next(dloader)
+                losses = self.train_on_batch(batch, _iter)
 
             self.raise_if_nan(losses)
             if is_rank_zero(self.rank):
@@ -287,6 +292,14 @@ class BaseTrainer:
                 # log the learning rates
                 wandb.log({f"LR/{i}": lr 
                             for i, lr in enumerate(self.scheduler.get_last_lr())}, step=self.step)
+                
+                # log the images 
+                # subset 4 images and denormalize by image mean and std
+                # _imgs = batch['condition'][:4]
+                # _imgs = (_imgs * IMAGENET_STD[None, :, None, None]) + \
+                #       IMAGENET_MEAN[None, :, None, None ]
+                # _imgs = make_grid(_imgs, nrow=4, normalize=True)
+                # wandb.log({f"Images": wandb.Image(_imgs)}, step=self.step)
 
             self.step += 1
 
@@ -305,7 +318,7 @@ class BaseTrainer:
                     # Validation loop
                     # ------------------------------------------------------------------------------------------------------
                     # validate on the entire validation set in every process but save only from rank 0, I know, inefficient, but avoids divergence of processes
-                    metrics, test_losses = self.validate()
+                    metrics, test_losses, images = self.validate()
                     # print("Validated: {}".format(metrics))
                     if self.should_log:
                         wandb.log(
@@ -313,6 +326,10 @@ class BaseTrainer:
 
                         wandb.log({f"Metrics/{k}": v for k,
                                     v in metrics.items()}, step=self.step)
+                        
+                        wandb.log({'val_images': [wandb.Image(img) for img in images]},
+                                    step=self.step
+                                    )
 
                         if (metrics[self.metric_criterion] < best_loss) and self.should_write:
                             self.save_checkpoint(
@@ -358,16 +375,18 @@ class BaseTrainer:
         with torch.no_grad():
             losses_avg = RunningAverageDict()
             metrics_avg = RunningAverageDict()
+            all_ims = []
             for i, batch in tqdm(enumerate(self.test_loader), 
                                  desc=f"Iter: {self.step}/{self.total_iter}. Loop: Validation", total=len(self.test_loader), disable=not is_rank_zero(self.rank)):
-                metrics, losses = self.validate_on_batch(batch, val_step=i)
+                metrics, losses, images = self.validate_on_batch(batch, val_step=i)
 
                 if losses:
                     losses_avg.update(losses)
                 if metrics:
                     metrics_avg.update(metrics)
+                all_ims.append(images)
 
-            return metrics_avg.get_value(), losses_avg.get_value()
+            return metrics_avg.get_value(), losses_avg.get_value(), all_ims
 
     def save_checkpoint(self, filename):
         if not self.should_write:

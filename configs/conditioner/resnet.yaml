@@ -1,0 +1,5 @@
+name: rgb_resnet18
+backbone: resnet18
+backbone_dim: 512
+seq_length: 64
+activation: tanh

@@ -61,9 +61,9 @@ def producer_fn(rank, **args):
 
     data = np.zeros((args['chunk_size'], num_keys, 512), dtype=np.float32)
     for _chunk in _iterator:
+        idxer = list(_chunk)
+        local_idxer = list(range(len(idxer)))
         for ii, n in enumerate(WS):
-            idxer = list(_chunk)
-            local_idxer = list(range(len(idxer)))
             data[local_idxer, ii, :] = group[n]['data'][idxer, :]
 
         # put data on the queue
@@ -75,17 +75,19 @@ def producer_fn(rank, **args):
 if __name__ == '__main__':
     def main():
         try:
-            store = zarr.LMDBStore('/ibex/ai/home/parawr/Projects/diffusion/data/w_plus_img_nocams_ids_0.7_150k/samples.lmdb',
-                                    readonly=True,
-                                    lock=False,)
-            queue = mp.Queue()
+            # store = zarr.LMDBStore('/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_img_cams_ids_0.7_150k_frontal_final/samples.lmdb',
+            #                         readonly=True,
+            #                         lock=False,)
+
+            store = zarr.storage.NestedDirectoryStore('/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_img_150k_frontal_id_0.9_28/samples.zarr')
+            queue = mp.Queue(maxsize=10_000)
 
             args = {}
             args['store'] = store
             args['queue'] = queue
             args['chunk_size'] = 1024
             args['world_size'] = 10
-            args['outdir'] = '/ibex/ai/home/parawr/Projects/diffusion/data/w_plus_img_nocams_ids_0.7_150k/w_plus_img_nocams_ids_0.7_150k/samples'
+            args['outdir'] = '/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_img_150k_frontal_id_0.9_28/samples'
             os.makedirs(args['outdir'], exist_ok=True)
 
             writers = []

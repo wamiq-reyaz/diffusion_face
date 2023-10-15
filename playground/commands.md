@@ -94,3 +94,22 @@ model=base  \
 diffusion.auto_normalize=False  \
 dataset.normalize_w=False
 ```
+
+```bash
+python src/infra/launch.py slurm=False training.resume=False \
+dataset=frontal_150k \
+experiment_name=rgb_conditional_seq_v_unet_150k_100k_fulltime_ema_sattn_cattn_padinmodel_minmax_styleganviz_deeplab_fixed_npy \
+model=base  \
+dataset=frontal_150k \
+diffusion.auto_normalize=True  \
+dataset.normalize_w=True \
+dataset.w_norm_type=min_max \
+dataset.z_scaler=7.0 \
+dataset.padding=[0,0] \
+diffusion.objective=pred_v \
+num_gpus=4 training.val_freq=5000 \
+env=local \
+conditioner=deeplab \
+training.total_iter=100000 \
+training.per_gpu_batch_size=96
+```

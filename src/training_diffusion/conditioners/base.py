@@ -20,14 +20,29 @@ class Conditioner(nn.Module):
             nn.Conv2d(self.cfg.conditioner.backbone_dim, 512, 1, 1),
             nn.ReLU(),
             nn.BatchNorm2d(512),
+            nn.ReLU(),
             nn.Conv2d(512, 512, 1, 1),
             nn.ReLU(),
             nn.BatchNorm2d(512),
+            nn.ReLU(),
             nn.Conv2d(512, cfg.model.dim, 1, 1),
         )
 
         self.activation = getattr(torch, cfg.conditioner.activation)
 
+        # # -------------------------------------------------------------
+        # # Initialize weights
+        # # -------------------------------------------------------------
+        # for m in self.suffix.modules():
+        #     if isinstance(m, nn.Conv2d):
+        #         nn.init.kaiming_normal_(m.weight, mode='fan_out')
+        #         if m.bias is not None:
+        #             nn.init.zeros_(m.bias)
+        #     elif isinstance(m, nn.BatchNorm2d):
+        #         nn.init.ones_(m.weight)
+        #         nn.init.zeros_(m.bias)
+        # -------------------------------------------------------------
+        
     def _fix_backbone(self):
         raise NotImplementedError
 

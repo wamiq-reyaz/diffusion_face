@@ -19,3 +19,8 @@ real_mesh_path: ${env.datasets_dir}/ffhq_512_posed_eg3d/deca_results_unposed
 # When used with slurm, this will take the dataset from `path_for_slurm_job`
 # and will copy it into the `path` location
 path_for_slurm_job: ${env.datasets_dir}/${dataset.name}
+
+# meshes and stuff
+obj_path: ${env.project_path}/data/demo/demo.obj
+lms_path: ${env.project_path}/data/demo/demo_kpt2d.txt
+lms_cond: True

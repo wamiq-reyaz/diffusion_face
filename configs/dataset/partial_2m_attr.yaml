@@ -31,9 +31,9 @@ type: a_data
 composer:
   all_retain_prob: 0.1  # probability of retaining all attributes and RGB
   attr_dropout: 0.5 # probability of dropping an attribute
-  attr_retain_prob: 0.9 # probability of retaining all attributes
-  seg_retain_prob: 0.9 # probability of retaining the segmentation condition
-  rgb_retain_prob: 0.9 # probability of retaining the RGB condition
+  attr_retain_prob: 0.5 # probability of retaining all attributes
+  seg_retain_prob: 0.5 # probability of retaining the segmentation condition
+  rgb_retain_prob: 0.5 # probability of retaining the RGB condition
   mask_types_rgb: [brush, class]
   mask_types_seg: [brush, class]
   min_num_vertex: 5

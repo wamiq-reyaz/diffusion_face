@@ -110,7 +110,7 @@ def random_brush(
         mask = np.flip(mask, 0)
     if np.random.random() > 0.5:
         mask = np.flip(mask, 1)
-    return mask[np.newaxis, ...].astype(np.float32)
+    return 1 - mask[np.newaxis, ...].astype(np.float32)
 
 def random_mask(s, hole_range=[0,1]):
     coef = min(hole_range[0] + hole_range[1], 1.0)
@@ -126,7 +126,7 @@ def random_mask(s, hole_range=[0,1]):
                 Fill(max_size)
         MultiFill(int(5 * coef), s // 2)
         MultiFill(int(3 * coef), s)
-        mask = np.logical_and(mask, 1 - random_brush(int(9 * coef), s))  # hole denoted as 0, reserved as 1
+        # mask = np.logical_and(mask, 1 - random_brush(int(9 * coef), s))  # hole denoted as 0, reserved as 1
         hole_ratio = 1 - np.mean(mask)
         if hole_range is not None and (hole_ratio <= hole_range[0] or hole_ratio >= hole_range[1]):
             continue

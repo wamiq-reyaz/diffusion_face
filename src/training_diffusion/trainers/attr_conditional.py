@@ -148,7 +148,8 @@ class Trainer(BaseTrainer):
         return loss
         
     def validate_on_batch(self, batch, val_step):
-        orig_img = batch['condition'].cuda().clone().detach()
+        orig_img = batch['condition'].cuda().clone().detach()[:, :3] # Bx3xHxW extract the RGB part
+        original_seg = batch['condition'].cuda().clone().detach()[:, -1] # Bx1xHxW extract the segmentation part
         condition = self.conditioner(batch['condition'].cuda())
         attr_condition = batch['attr'].cuda() # BxS'
         attr_condition = self.embedder(attr_condition) # BxExS'
@@ -178,7 +179,7 @@ class Trainer(BaseTrainer):
         images = to_uint8(images)
 
         # denormalize the condition images with imagenet stats
-        condition = orig_img[0:1].clone().detach()
+        condition = orig_img[0:1].clone().cpu().detach()
         imagenet_mean = torch.tensor([0.485, 0.456, 0.406]).view(1,3,1,1).numpy()
         imagenet_std = torch.tensor([0.229, 0.224, 0.225]).view(1,3,1,1).numpy()
         condition = condition * imagenet_std + imagenet_mean

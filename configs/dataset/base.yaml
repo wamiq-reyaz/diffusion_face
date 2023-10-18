@@ -4,6 +4,7 @@ w_path: ${dataset.path}/samples
 img_path: ${dataset.path}/images
 stats_path: ${dataset.path}/stats.pt
 base_seq_len: 73
+attr_seq_len: 0
 padding: [0,0]
 
 # Default parameters
@@ -24,3 +25,6 @@ path_for_slurm_job: ${env.datasets_dir}/${dataset.name}
 obj_path: ${env.project_path}/data/demo/demo.obj
 lms_path: ${env.project_path}/data/demo/demo_kpt2d.txt
 lms_cond: True
+
+type: w_data
+mode: train

@@ -195,6 +195,7 @@ def linspace(val_from: float, val_to: float, num_steps: int) -> List[float]:
 def diffusion_length_resolver(base_seq_len: int,
                             padding: List[int],
                             cond_seq_len: int,
+                            attr_seq_len: int,
                             condition_is_attention: bool,) -> int:
     """
     Computes the sequence length for the diffusion process, depending on the
@@ -202,6 +203,7 @@ def diffusion_length_resolver(base_seq_len: int,
     """
     diff_len = 0
     diff_len += base_seq_len
+    diff_len += attr_seq_len
     diff_len += sum(padding)
     if not condition_is_attention:
         diff_len += cond_seq_len

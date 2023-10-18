@@ -11,6 +11,7 @@ from .conditioners.builder import get_conditioner
 
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import Subset
+from copy import deepcopy
 
 class InfiniteDataSampler(DistributedSampler):
     def __init__(self,
@@ -49,7 +50,11 @@ class ModelBuilder:
         # Make infinite. WARNING: shuffle is performed only once
         # self.train_loader = cycle(self.train_loader)
 
-        self.test_dataset = create_dataset(cfg)
+        # if there exist some special test settings, use them
+        if hasattr(cfg.dataset, 'mode'):
+            test_cfg = deepcopy(cfg)
+            test_cfg.dataset.mode = 'test'
+        self.test_dataset = create_dataset(test_cfg)
         self.test_dataset = Subset(self.test_dataset, range(1024))
 
         self.test_loader = torch.utils.data.DataLoader(self.test_dataset,

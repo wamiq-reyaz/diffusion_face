@@ -1,0 +1,5 @@
+name: rgb_seg
+backbone: segmentation.deeplabv3_mobilenet_v3_large
+backbone_dim: 256
+seq_length: 256
+activation: tanh

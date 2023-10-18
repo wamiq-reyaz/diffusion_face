@@ -39,7 +39,7 @@ def save_worker(rank: int,
                     
                     seg = Image.fromarray(seg.astype(np.uint8))
                     # seg = seg.resize((512, 512), Image.NEAREST) # the segmentation is done on 448 sized images
-                    seg.save(os.path.join(_dir, 'seg_map', str(n).zfill(7)+'.png'))
+                    seg.save(os.path.join(_dir, 'seg', str(n).zfill(7)+'.png'))
                     np.save(os.path.join(_dir, 'attr', str(n).zfill(7)+'.npy'), attr)
     except Exception as e:
         print(e, rank)
@@ -116,7 +116,7 @@ if __name__ == '__main__':
             super().__init__()
             device = 'cuda'
 
-            face_detector = facer.face_detector("retinaface/resnet50", device=device, threshold=0.1)
+            face_detector = facer.face_detector("retinaface/resnet50", device=device, threshold=0.5)
 
             for k, v in face_detector.named_parameters():
                 v.requires_grad_(False)
@@ -165,15 +165,16 @@ if __name__ == '__main__':
     model = ALL()
     model = model.cuda()
     model = model.eval()
-  
-    sys.path.append('../src')
+    # model = torch.nn.DataParallel(model)
+    
+    sys.path.append('./src')
     from training_diffusion.datasets.latent import WData
 
     d = WData(
         cfg=None,
-        w_path='/ibex/ai/home/parawr/Projects/diffusion/data/w_plus_img_cams_ids_0.7_500k_final/samples',
-        img_path='/ibex/ai/home/parawr/Projects/diffusion/data/w_plus_img_cams_ids_0.7_500k_final/images',
-        stats_path='/ibex/ai/home/parawr/Projects/diffusion/data/w_plus_img_cams_ids_0.7_500k_final/stats.pt',
+        w_path='/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_img_cams_ids_0.7_2m_final/samples',
+        img_path='/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_img_cams_ids_0.7_2m_final/images',
+        stats_path='/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_img_cams_ids_0.7_150k_frontal_final/stats.pt',
         padding=[0, 0],
         image_size=512,
         normalize_w=True,
@@ -189,7 +190,7 @@ if __name__ == '__main__':
     # ------------------------------------------------------------------------------
 
     # Create a queue for the workers
-    queue = mp.Queue()
+    queue = mp.Queue(maxsize=100_00)
 
     # Create the workers
     workers = []
@@ -202,7 +203,15 @@ if __name__ == '__main__':
     # Process the data
     # ------------------------------------------------------------------------------
     _count = 0
-    for _data in tqdm.tqdm(dloader, total=len(dloader)):
+    for ii, _data in tqdm.tqdm(enumerate(dloader), total=len(dloader)):
+        #20676/124992
+        #40880/124992
+        #61083
+        #81298/124992
+        #101498/124992
+        # 121702/124992
+        if ii < 121701:
+            continue
         if _count < -1: 
             _count += 1
             continue
@@ -231,7 +240,7 @@ if __name__ == '__main__':
                     {
                         'seg_map': retval['seg_map'].clone().detach().cpu().numpy(),
                         'attrs': retval['attrs'].clone().detach().cpu().numpy(),
-                        'dir': '/ibex/ai/home/parawr/Projects/diffusion/data/w_plus_img_cams_ids_0.7_500k_final',
+                        'dir': '/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_img_cams_ids_0.7_2m_final',
                         'idx': idx.clone().detach().cpu().numpy()
                     }
                 )

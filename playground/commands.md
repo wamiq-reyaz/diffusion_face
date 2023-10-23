@@ -26,7 +26,7 @@ python save_samples_next3d.py --outdir=out --trunc=0.7 --shapes=False --seeds=16
 --obj_path=../data/demo/demo.obj    \
 --lms_path=../data/demo/demo_kpt2d.txt \
 --lms_cond=True --reload_modules=False \
---outdir=/ibex/ai/home/parawr/Projects/diffusion/data/w_plus_img_cams_ids_0.7_2m_final_test1 \
+--outdir=/ibex/project/c2241/data/diffusion/w_plus_img_cams_ids_0.7_2m_final_test1 \
 --scale_lms=False \
 --num_gpus 1 \
 --num_writers 10 \
@@ -40,14 +40,14 @@ python save_samples_next3d.py --outdir=out --trunc=0.7 --shapes=False --seeds=16
 --lmdb True
 ```
 
-```
+```bash
 python save_samples_next3d.py --outdir=out --trunc=0.7 --shapes=False --seeds=169     \
 --trunc-cutoff 28 \
 --network=../pretrained_models/next3d_ffhq_512.pkl \
 --obj_path=../data/demo/demo.obj    \
 --lms_path=../data/demo/demo_kpt2d.txt \
 --lms_cond=True --reload_modules=False \
---outdir=/ibex/ai/home/parawr/Projects/diffusion/data/w_plus_img_cams_ids_0.7_2m_final \
+--outdir=/ibex/project/c2241/data/diffusion/w_plus_img_cams_ids_0.7_2m_largefov_largestd_final \
 --scale_lms=False \
 --num_gpus 4 \
 --num_writers 16 \
@@ -57,8 +57,8 @@ python save_samples_next3d.py --outdir=out --trunc=0.7 --shapes=False --seeds=16
 --dataset_path /ibex/ai/home/parawr/Projects/diffusion/data/ffhq_512_posed_eg3d \
 --mesh_path /ibex/ai/home/parawr/Projects/diffusion/data/ffhq_512_posed_eg3d/deca_results_unposed \
 --num_samples 1999872 \
---horizontal_stddev 0.1 \
---vertical_stddev 0.1 \
+--horizontal_stddev 0.15 \
+--vertical_stddev 0.15 \
 --lmdb True
 ```
 
@@ -112,4 +112,24 @@ env=local \
 conditioner=deeplab \
 training.total_iter=100000 \
 training.per_gpu_batch_size=96
+```
+
+```bash
+python src/infra/launch.py slurm=True \
+training.resume=False \
+dataset=partial_2m_attr experiment_name=rgb_seg_conditional_seq_v_unet_2m_200k_mlp_embedder \
+model=base  \
+diffusion.auto_normalize=True  \
+dataset.normalize_w=True \
+dataset.w_norm_type=min_max \
+dataset.z_scaler=7.0 \
+dataset.padding=[0,0] \
+diffusion.objective=pred_v \
+num_gpus=4 \
+training.val_freq=5000 \
+env=raven \
+conditioner=deeplab_seg \
+training=embedder
+training.total_iter=200000 \
+training.per_gpu_batch_size=96 
 ```

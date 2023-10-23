@@ -111,9 +111,8 @@ if __name__ == '__main__':
     logger.addHandler(fh)
     # ------------------------------------------------------------------------------
 
-    class ALL(torch.nn.Module):
+    class ALL:
         def __init__(self):
-            super().__init__()
             device = 'cuda'
 
             face_detector = facer.face_detector("retinaface/resnet50", device=device, threshold=0.5)
@@ -128,6 +127,9 @@ if __name__ == '__main__':
 
             face_parser.conf_name = 'lapa/448'
 
+
+            face_parser = torch.nn.DataParallel(face_parser)
+
             label_names = pretrain_settings['celebm/448']['label_names']
 
             face_attr = facer.face_attr("farl/celeba/224", device=device)
@@ -135,12 +137,13 @@ if __name__ == '__main__':
             for k, v in face_attr.named_parameters():
                 v.requires_grad_(False)
 
+            face_attr = torch.nn.DataParallel(face_attr)
 
             self.face_detector = face_detector
             self.face_parser = face_parser
             self.face_attr = face_attr
 
-        def forward(self, x):
+        def __call__(self, x):
             # print(x.shape)
             x = x * 255. # the image is normalized within the model
             faces = self.face_detector(x)
@@ -151,21 +154,33 @@ if __name__ == '__main__':
             x = x[valid]
             logger.warning(f'valid {valid}')
 
+            batch_per_gpu = 16
+            num_gpus = 4
+            total_bs = batch_per_gpu * num_gpus
+            for ii in range(0, filtered_faces['rects'].shape[0], total_bs):
+                _s = ii
+                _e = min(ii + total_bs, filtered_faces['rects'].shape[0])
+                new_faces = dict()
+                for k, v in filtered_faces.items():
+                    new_faces[k] = v[_s:_e]
 
-            val = self.face_parser(x, filtered_faces)
-            val['faces'] = faces
-            val['attributes'] = self.face_attr(x, filtered_faces)
-            seg_logits = val['seg']['logits']
-            seg_probs = seg_logits.softmax(dim=1)  # nfaces x nclasses x h x w
-            seg_map = seg_probs.argmax(dim=1)
-            val['seg_map'] = seg_map
-            val['valid_idx'] = valid
-            val['attrs'] = val['attributes']['attrs']
-            return val
+                # reindex the valid faces
+                new_faces['image_ids'] = torch.arange(total_bs)
+                new_images = x[_s:_e].repeat(num_gpus, 1, 1 ,1)
+
+                val = self.face_parser(new_images, new_faces)
+                val['attributes'] = self.face_attr(new_images, new_faces)
+                seg_logits = val['seg']['logits']
+                seg_probs = seg_logits.softmax(dim=1)  # nfaces x nclasses x h x w
+                seg_map = seg_probs.argmax(dim=1)
+                val['seg_map'] = seg_map
+                val['valid_idx'] = valid[_s:_e]
+                val['attrs'] = val['attributes']['attrs']
+                yield val
         
     model = ALL()
-    model = model.cuda()
-    model = model.eval()
+    # model = model.cuda()
+    # model = model.eval()
     # model = torch.nn.DataParallel(model)
     
     sys.path.append('./src')
@@ -183,7 +198,7 @@ if __name__ == '__main__':
     )
 
     
-    dloader = DataLoader(d, batch_size=16, num_workers=4)
+    dloader = DataLoader(d, batch_size=128, num_workers=20)
     print('Created dataloader')
 
     # ------------------------------------------------------------------------------
@@ -224,27 +239,29 @@ if __name__ == '__main__':
 
         with torch.no_grad():
             with torch.inference_mode():
-                retval = model(image)  
-                # Log the invalid indices 
-                _all_idx = set(range(idx.shape[0]))
-                _valid_idx = set(retval['valid_idx'])
-                _invalid_idx = _all_idx - _valid_idx
-                actual_idx = idx[list(_invalid_idx)]
-                logger.warning(f'Batch {_count} Invalid indices: {actual_idx.numpy().ravel().tolist()}')
+                retval_iterator = model(image)  
+                for retval in retval_iterator:
+                    # Log the invalid indices 
+                    _all_idx = set(range(idx.shape[0]))
+                    _valid_idx = set(retval['valid_idx'])
+                    _invalid_idx = _all_idx - _valid_idx
+                    actual_idx = idx[list(_invalid_idx)]
+                    logger.warning(f'Batch {_count} Invalid indices: {actual_idx.numpy().ravel().tolist()}')
 
-                # subset the valid indices
-                idx = idx[retval['valid_idx']]
-                assert idx.shape[0] == retval['seg_map'].shape[0]
-                assert idx.shape[0] == retval['attrs'].shape[0]
+                    # subset the valid indices
+                    local_idx = idx[retval['valid_idx']]
+                    assert local_idx.shape[0] == retval['seg_map'].shape[0]
+                    assert local_idx.shape[0] == retval['attrs'].shape[0]
 
-                queue.put(
-                    {
-                        'seg_map': retval['seg_map'].clone().detach().cpu().numpy(),
-                        'attrs': retval['attrs'].clone().detach().cpu().numpy(),
-                        'dir': '/ibex/project/c2241/data/diffusion/w_plus_img_cams_ids_0.7_2m_largefov_largestd_final',
-                        'idx': idx.clone().detach().cpu().numpy()
-                    }
-                )
+
+                    queue.put(
+                        {
+                            'seg_map': retval['seg_map'].clone().detach().cpu().numpy(),
+                            'attrs': retval['attrs'].clone().detach().cpu().numpy(),
+                            'dir': '/ibex/project/c2241/data/diffusion/w_plus_img_cams_ids_0.7_2m_largefov_largestd_final',
+                            'idx': local_idx.clone().detach().cpu().numpy()
+                        }
+                    )
 
         _count += 1
     print('Finished processing data')

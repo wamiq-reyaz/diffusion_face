@@ -316,9 +316,24 @@ def generate_images(
                                     batch_size= bs,
                                     device='cuda'
                                     ).cuda()
-                intrinsics = FOV_to_intrinsics(fov_deg).cuda()
+                _rand = torch.rand(bs, 1, device='cuda')
+                _big_fov_mask = _rand < 0.7
+                _small_fov_mask = _rand >= 0.7
+                _fovs = torch.zeros(bs, 1, device='cuda')
+                _fovs[_big_fov_mask] = 22.0 + 3 * torch.rand_like(_fovs[_big_fov_mask])
+                _fovs[_small_fov_mask] = 18.0 + 4 * torch.rand_like(_fovs[_small_fov_mask])
+                # intrinsics = FOV_to_intrinsics(_fovs).cuda()
+                focal_lengths = (1 / (torch.tan(_fovs * 3.14159 / 360) * 1.414)).float()
+
+                intrinsics = torch.tensor([[[0, 0, 0.5], [0, 0, 0.5], [0, 0, 1]]], device='cuda')
+                assert intrinsics.shape[1:] == (3, 3)
+                intrinsics = intrinsics.repeat_interleave(bs, dim=0)
+                intrinsics[:, 0, 0] = focal_lengths.squeeze()
+                intrinsics[:, 1, 1] = focal_lengths.squeeze()
+
                 # TODO: change view point and intrinsics to simulate different cameras
-                _c = torch.cat([cam2world_pose.reshape(-1, 16), intrinsics.reshape(-1, 9).repeat_interleave(bs, 0)], 1)
+                # _c = torch.cat([cam2world_pose.reshape(-1, 16), intrinsics.reshape(-1, 9).repeat_interleave(bs, 0)], 1)
+                _c = torch.cat([cam2world_pose.reshape(-1, 16), intrinsics.reshape(-1, 9)], 1)
 
             ws = G.mapping(z, _c, truncation_psi=truncation_psi, truncation_cutoff=truncation_cutoff)
             # clear the list before synthesising

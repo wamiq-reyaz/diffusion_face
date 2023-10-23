@@ -10,6 +10,7 @@ before_train_commands:
   - conda activate /home/parawr/Projects/Next3D/env
   - pwd
   - python -c 'import torch; print("Number of GPUs available:", torch.cuda.device_count())'
-datasets_dir: /ibex/ai/home/parawr/Projects/diffusion/data
+# datasets_dir: /ibex/ai/home/parawr/Projects/diffusion/data
+datasets_dir: /ibex/project/c2241/data/diffusion/
 results_dir: /ibex/ai/home/parawr/Projects/diffusion/experiments
 slurm_constraint: a100

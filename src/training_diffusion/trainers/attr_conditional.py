@@ -1,3 +1,4 @@
+from itertools import chain
 import os
 import uuid
 
@@ -24,10 +25,15 @@ from ..common import (
 class FixedPositionalEncoding(torch.nn.Module):
     def __init__(self, proj_dims, val=0.1):
         super().__init__()
-        ll = proj_dims//2
-        exb = 2 * torch.linspace(0, ll-1, ll) / proj_dims
-        self.sigma = 1.0 / torch.pow(val, exb).view(1, -1, 1)
-        self.sigma = 2 * torch.pi * self.sigma
+        # val = torch.nn.Parameter(torch.tensor(val))
+        ll = proj_dims // 2
+        exb = 2 * torch.linspace(0, ll - 1, ll) / proj_dims
+
+        # Avoid in-place operations by creating a new tensor instead of modifying `self.sigma` directly.
+        sigma = 1.0 / torch.pow(val, exb).view(1, -1, 1)
+        sigma = 2 * torch.pi * sigma  # This creates a new tensor, not modifying the existing one in-place.
+
+        self.sigma = torch.nn.Parameter(sigma)
 
     def forward(self, x):
         ''' x: BxS
@@ -43,14 +49,18 @@ class Trainer(BaseTrainer):
                 cfg,
                 model_builder,
                 rank):
-        super().__init__(cfg, model_builder, rank)
         self.conditioner = model_builder.get_conditioner()
+        self.embedder = torch.nn.parallel.DistributedDataParallel(
+            FixedPositionalEncoding(proj_dims=cfg.model.channels).cuda(), # cannot use cfg here because not init
+            device_ids=[rank],
+            broadcast_buffers=False,
+        )
+        super().__init__(cfg, model_builder, rank)
 
         # Redo the optimizer and scheduler to include the conditioner
         self.optimizer = self.init_optimizer()
         self.scheduler = self.init_scheduler()
         # create a sin_cos embedder for the attributes
-        self.embedder = FixedPositionalEncoding(proj_dims=self.cfg.model.channels)
 
         # resuming
         if self.cfg.training.resume == "latest":
@@ -90,9 +100,11 @@ class Trainer(BaseTrainer):
         if self.cfg.num_gpus > 1:
             self.model.module.load_state_dict(ckpt["model"])
             self.conditioner.module.load_state_dict(ckpt["conditioner"])
+            self.embedder.module.load_state_dict(ckpt["embedder"])
         else:
             self.model.load_state_dict(ckpt["model"])
             self.conditioner.load_state_dict(ckpt["conditioner"])
+            self.embedder.load_state_dict(ckpt["embedder"])
         self.optimizer.load_state_dict(ckpt["optimizer"])
         self.scheduler.load_state_dict(ckpt["scheduler"])
         self.step = ckpt["step"]
@@ -100,10 +112,14 @@ class Trainer(BaseTrainer):
     def init_optimizer(self):
         m = self.model.module if self.cfg.num_gpus > 1 else self.model
         cm = self.conditioner.module if self.cfg.num_gpus > 1 else self.conditioner
+        em = self.embedder.module if self.cfg.num_gpus > 1 else self.embedder
 
         param_groups = []
         if cm is not None:
-            param_groups.append({'params': cm.parameters(),
+            param_groups.append({'params': chain(
+                                            cm.parameters(),
+                                            em.parameters()
+                                            ),
                                 'lr': self.cfg.optimizer.lr2,
                                 'weight_decay': self.cfg.optimizer.wd2,
                                 'betas': self.cfg.optimizer.betas2,
@@ -209,6 +225,7 @@ class Trainer(BaseTrainer):
             'conditioner': cm.state_dict(),
             'optimizer': self.optimizer.state_dict(),
             'scheduler': self.scheduler.state_dict(),
+            'embedder': self.embedder.state_dict(),
             'ema': self.ema.state_dict() if self.ema else None,
             'step': self.step,
         }, fpath)

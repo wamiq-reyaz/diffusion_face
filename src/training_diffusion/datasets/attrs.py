@@ -54,6 +54,8 @@ class AData(Dataset):
         self.n_classes = cfg_c.n_classes
         self.max_tries_brush = cfg_c.max_tries_brush
         self.max_tries_class = cfg_c.max_tries_class # number of classes to drop
+        self.drop_seg = cfg_c.drop_seg # boolean, whether to drop the segmentation condition
+        self.drop_rgb = cfg_c.drop_rgb # boolean, whether to drop the RGB condition
         
         # ----------------------------
         # Padding and image size
@@ -178,7 +180,12 @@ class AData(Dataset):
         img = kwargs['img']
         attr = kwargs['attr']
         seg = kwargs['seg']
-        
+
+        if self.drop_rgb:
+            img = torch.zeros_like(img)
+        if self.drop_seg:
+            seg = torch.zeros_like(seg)
+            
         # return early
         if self.mode in ['val', 'test']:
             img_mask = torch.ones(1)

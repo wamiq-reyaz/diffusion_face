@@ -24,6 +24,7 @@ class MLPEmbedding(torch.nn.Module):
         self.dropout = dropout
         self.activation = getattr(torch.nn, activation)
 
+        self.pos_embed = torch.nn.Embedding(50, proj_dims)
         self.layers = torch.nn.ModuleList()
         self.layers.append(FixedPositionalEncoding(proj_dims=proj_dims))
         self.layers.append(Rearrange('b e s -> b s e'))
@@ -36,9 +37,14 @@ class MLPEmbedding(torch.nn.Module):
         self.layers.append(Rearrange('b s e -> b e s'))
 
     def forward(self, x):
-        for layer in self.layers:
+
+        for layer in self.layers[:2]: # sinusoid + rearrange
             x = layer(x)
-        return x
+        x = x + self.pos_embed(torch.arange(x.shape[1]).unsqueeze(0).repeat(x.shape[0], 1, 1).to(x.device))
+
+        for layer in self.layers[1:]:
+            x = layer(x)
+        return torch.tanh(x)
 
 class Trainer(OriginalTrainer):
     def __init__(self,
@@ -64,6 +70,3 @@ class Trainer(OriginalTrainer):
         # reinit the optimizer and scheduler
         self.optimizer = self.init_optimizer()
         self.scheduler = self.init_scheduler()
-
-    
-

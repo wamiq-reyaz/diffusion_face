@@ -31,7 +31,7 @@ stylegan_path: /home/parawr/Projects/Next3D/pretrained_models/next3d_ffhq_512.pk
 desc: null # String to include in result dir name
 metrics: fid2k_full,nfs256 # Quality metrics
 main_metric: __pick_first__ # Takes the first metric among `metrics` as the main one to compute the best checkpoint
-total_iter: 200000 # Total training duration
+total_iter: 500000 # Total training duration
 tick: 4 # How often to print progress
 val_freq: 5000 # How often to compute metrics
 snap: 5000 # How often to save snapshots

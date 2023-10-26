@@ -7,6 +7,7 @@ before_train_commands:
   - module unload cuda
   - module load cmake
   - module load gcc/11.1.0
+  - module load cudnn/8.8.1-cuda11.8.0  # because nvcc crashed 
   - conda activate /home/parawr/Projects/Next3D/env
   - pwd
   - python -c 'import torch; print("Number of GPUs available:", torch.cuda.device_count())'

@@ -47,3 +47,5 @@ composer:
   n_classes: 19
   max_tries_brush: 15
   max_tries_class: 2
+  drop_seg: False
+  drop_rgb: False

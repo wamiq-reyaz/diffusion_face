@@ -60,7 +60,7 @@ class ModelBuilder:
 
         self.test_loader = torch.utils.data.DataLoader(self.test_dataset,
                                                         batch_size=cfg.training.test_batch_gpu,
-                                                        num_workers=cfg.training.workers,
+                                                        num_workers=2,
                                                         sampler=None,
                                                         pin_memory=True,
                                                         shuffle=False,

@@ -1,0 +1,9 @@
+name: attr_conditional_mlp
+
+# embedder params
+proj_dims: 512
+hidden_dims: 512
+out_dims: 512
+num_layers: 5
+dropout: 0.0
+activation: ReLU

@@ -186,11 +186,22 @@ if __name__ == '__main__':
     sys.path.append('./src')
     from training_diffusion.datasets.latent import WData
 
+    # d = WData(
+    #     cfg=None,
+    #     w_path='/ibex/project/c2241/data/diffusion/w_plus_img_cams_ids_0.7_2m_largefov_largestd_final/samples',
+    #     img_path='/ibex/project/c2241/data/diffusion/w_plus_img_cams_ids_0.7_2m_largefov_largestd_final/images',
+    #     stats_path='/ibex/project/c2241/data/diffusion/w_plus_img_cams_ids_0.7_2m_largefov_largestd_final/stats.pt',
+    #     padding=[0, 0],
+    #     image_size=512,
+    #     normalize_w=True,
+    #     normalize_image=False # the image is normalized within the model
+    # )
+    
     d = WData(
         cfg=None,
-        w_path='/ibex/project/c2241/data/diffusion/w_plus_img_cams_ids_0.7_2m_largefov_largestd_final/samples',
-        img_path='/ibex/project/c2241/data/diffusion/w_plus_img_cams_ids_0.7_2m_largefov_largestd_final/images',
-        stats_path='/ibex/project/c2241/data/diffusion/w_plus_img_cams_ids_0.7_2m_largefov_largestd_final/stats.pt',
+        w_path='/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_cams_ids_0.7_frontal_demo_seed42/samples',
+        img_path='/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_cams_ids_0.7_frontal_demo_seed42/images',
+        stats_path='/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_img_cams_ids_0.7_150k_frontal_final/stats.pt',
         padding=[0, 0],
         image_size=512,
         normalize_w=True,
@@ -258,7 +269,7 @@ if __name__ == '__main__':
                         {
                             'seg_map': retval['seg_map'].clone().detach().cpu().numpy(),
                             'attrs': retval['attrs'].clone().detach().cpu().numpy(),
-                            'dir': '/ibex/project/c2241/data/diffusion/w_plus_img_cams_ids_0.7_2m_largefov_largestd_final',
+                            'dir': '/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_cams_ids_0.7_frontal_demo_seed42',
                             'idx': local_idx.clone().detach().cpu().numpy()
                         }
                     )

@@ -360,6 +360,20 @@ def generate_images(
                 data[:, :valid_len] = k[1].numpy()
                 _array[k[0]]['data'][curr_seed_idxes, :] = data
 
+            # ----------------------------------------------------------------------------
+            # Save the shapes, landmarks and camera parameters
+            # ----------------------------------------------------------------------------
+            if shapes:
+                # ----------------------------------------------------------------------------
+                # Save the shapes
+                # ----------------------------------------------------------------------------
+                for ii, (v, c) in enumerate(zip(_v, _c)):
+                    _dir = os.path.join(outdir, 'shapes')
+                    v = v.detach().cpu().numpy()
+                    c = c.detach().cpu().numpy()
+                    # save as numpy arrays
+                    np.save(os.path.join(_dir, str(curr_seed_idxes[ii]).zfill(7) + '_shape.npy'), v)
+                    np.save(os.path.join(_dir, str(curr_seed_idxes[ii]).zfill(7) + '_camera.npy'), c)
             
 
     print('Completed rank', rank)
@@ -378,7 +392,7 @@ if __name__ == '__main__':
     @click.option('--trunc', 'truncation_psi', type=float, help='Truncation psi', default=1, show_default=True)
     @click.option('--trunc-cutoff', 'truncation_cutoff', type=int, help='Truncation cutoff', default=14, show_default=True)
     @click.option('--outdir', help='Where to save the output images', type=str, required=True, metavar='DIR')
-    @click.option('--shapes', help='Export shapes as .mrc files viewable in ChimeraX', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
+    @click.option('--shapes', help='Export shapes cameras and shapes as npy', type=bool, required=False, metavar='BOOL', default=False, show_default=True)
     @click.option('--shape-res', help='', type=int, required=False, metavar='int', default=512, show_default=True)
     @click.option('--fov-deg', help='Field of View of camera in degrees', type=float, required=False, metavar='float', default=18.837, show_default=True)
     @click.option('--horizontal_stddev', help='The horizontal angle stddev', type=float, required=False, metavar='float', default=0.0, show_default=True)

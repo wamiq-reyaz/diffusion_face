@@ -140,8 +140,8 @@ def mask_category(max_tries, n_classes, img):
     base_mask = np.ones_like(img)
     tries = np.random.randint(max_tries)
     for _ in range(tries):
-        idx = np.random.randint(n_classes)
-        mask = np.where(img == idx, 0, 1)
+        idx = np.random.randint(n_classes) / float(n_classes)
+        mask = np.where(np.abs(img - idx) < 0.01, 0, 1)
         base_mask = np.logical_and(base_mask, mask)
         
     return base_mask.astype(np.float32)

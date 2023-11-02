@@ -34,9 +34,9 @@ if __name__ == '__main__':
     # store = zarr.storage.NestedDirectoryStore('/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_img_150k_frontal_id_0.9_28/samples.zarr')
     # outdir = '/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_img_150k_frontal_id_0.9_28/samples2'
 
-    store = zarr.LMDBStore('/ibex/project/c2241/data/diffusion/w_plus_img_cams_ids_0.7_2m_largefov_largestd_final/samples.lmdb',
+    store = zarr.LMDBStore('/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_cams_ids_0.7_frontal_demo_seed42/samples.lmdb',
                         readonly=True, lock=False,)
-    outdir = '/ibex/project/c2241/data/diffusion/w_plus_img_cams_ids_0.7_2m_largefov_largestd_final/samples'
+    outdir = '/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_cams_ids_0.7_frontal_demo_seed42/samples'
 
 
     os.makedirs(outdir, exist_ok=True)

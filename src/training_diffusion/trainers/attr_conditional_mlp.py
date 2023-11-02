@@ -37,14 +37,21 @@ class MLPEmbedding(torch.nn.Module):
         self.layers.append(Rearrange('b s e -> b e s'))
 
     def forward(self, x):
+        ''' Args:
+            x: (b, s)
+            Returns:
+            x: (b, e, s)
 
+        '''
         for layer in self.layers[:2]: # sinusoid + rearrange
-            x = layer(x)
-        x = x + self.pos_embed(torch.arange(x.shape[1]).unsqueeze(0).repeat(x.shape[0], 1, 1).to(x.device))
+            x = layer(x) # (b, s, e)
+            
+        pembed = self.pos_embed(torch.arange(x.shape[1]).unsqueeze(0).repeat(x.shape[0], 1).to(x.device)) # (b, s, e)
+        x = x + pembed
 
-        for layer in self.layers[1:]:
+        for layer in self.layers[2:]:
             x = layer(x)
-        return torch.tanh(x)
+        return x
 
 class Trainer(OriginalTrainer):
     def __init__(self,

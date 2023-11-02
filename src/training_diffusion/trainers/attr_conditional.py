@@ -22,6 +22,33 @@ from ..common import (
                     batch_to_PIL
                     )
 
+# create a random color_map
+cmap = np.array([
+    np.array((1.0, 1.0, 1.0), np.float32),
+    np.array((255, 250, 79), np.float32) / 255.0,  # face
+    np.array([255, 125, 138], np.float32) / 255.0,  # lb
+    np.array([213, 32, 29], np.float32) / 255.0,  # rb
+    np.array([0, 144, 187], np.float32) / 255.0,  # le
+    np.array([0, 196, 253], np.float32) / 255.0,  # re
+    np.array([255, 129, 54], np.float32) / 255.0,  # nose
+    np.array([88, 233, 135], np.float32) / 255.0,  # ulip
+    np.array([0, 117, 27], np.float32) / 255.0,  # llip
+    np.array([255, 76, 249], np.float32) / 255.0,  # imouth
+    np.array((1.0, 0.0, 0.0), np.float32),  # hair
+    np.array((255, 250, 100), np.float32) / 255.0,  # lr
+    np.array((255, 250, 100), np.float32) / 255.0,  # rr
+    np.array((250, 245, 50), np.float32) / 255.0,  # neck
+    np.array((0.0, 1.0, 0.5), np.float32),  # cloth
+    np.array((0.0, 1.0, 140), np.float32),  # cloth
+    np.array((255, 1.0, 0.1), np.float32),  # cloth
+    np.array((1.0, 0.0, 0.5), np.float32),
+    np.array((1.0, 1.0, 0.5), np.float32),
+]
+)
+
+cmap = cmap.astype(np.uint8)
+
+
 class FixedPositionalEncoding(torch.nn.Module):
     def __init__(self, proj_dims, val=0.1):
         super().__init__()
@@ -201,9 +228,12 @@ class Trainer(BaseTrainer):
         condition = condition * imagenet_std + imagenet_mean
         condition = (condition * 255).permute(0,2,3,1).numpy()
 
-        concat_images = np.concatenate([condition, images.cpu().numpy()], axis=1)
+        seg_condition = original_seg[0:1].clone().cpu().detach().numpy()
+        seg = cmap[seg_condition.astype(np.int32)] # HxWx3
+    
+        concat_images = np.concatenate([seg, condition, images.cpu().numpy()], axis=1)
         concat_images = concat_images.squeeze()
-            
+
         return {'mse': mse}, {'mse': mse}, concat_images
 
     def save_checkpoint(self, filename):

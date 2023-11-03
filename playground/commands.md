@@ -67,12 +67,18 @@ salloc --time 16:00:00 --gres gpu:v100:4 --cpus-per-task 16  --mem 64G --account
 ```
 
 ### Reenactment
-```bash
-python reenact_avatar_next3d.py --drive_root=data/reenactment/obama \
+```bashle completions. As sampling from a diffusion
+model is inherently probabilistic, we can generate multiple sam-
+ples adhering to the same conditiwr/Projects/diffusion/code/data/obama \
   --network=../pretrained_models/next3d_ffhq_512.pkl \
   --grid=2x1 --seeds=166 --outdir=out --fname=reenact.mp4 \
   --trunc=0.7 --lms_cond=1
 ```
+
+```bash
+CUDA_VISIBLE_DEVICES=2 python reenact_avatar_next3d.py --drive_root=/datawaha/cggroup/parawr/Projects/diffusion/code/data/obama   --network=../pretrained_models/next3d_ffhq_512.pkl   --grid=2x1 --seeds=166 --outdir=out --fname=reenact.mp4   --trunc=0.7 --lms_cond=1
+```
+
 
 ### Train the diffusion model
 

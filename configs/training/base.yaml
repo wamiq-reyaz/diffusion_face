@@ -1,5 +1,5 @@
 name: rgb_conditional
-per_gpu_batch_size: 128
+per_gpu_batch_size: 96
 batch_size: 64 # Total batch size  # TODO
 test_batch_gpu: 64 # Batch size at test time
 

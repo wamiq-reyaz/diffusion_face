@@ -1,0 +1,52 @@
+name: w_plus_img_cams_ids_0.7_150k_frontal_final
+path: ${env.datasets_dir}/${dataset.name}
+w_path: ${dataset.path}/samples
+img_path: ${dataset.path}/images
+attr_path: ${dataset.path}/attr
+seg_path: ${dataset.path}/seg
+stats_path: ${dataset.path}/stats.pt
+base_seq_len: 73
+attr_seq_len: 21
+padding: [23,0]
+
+# Default parameters
+image_size: 256
+normalize_w: True
+normalize_image: True
+w_norm_type: min_max
+z_scaler: 1.0
+
+# TODO:
+# FFHQ parameters
+# real_img_path: ${env.datasets_dir}/ffhq_512_posed_eg3d
+# real_mesh_path: ${env.datasets_dir}/ffhq_512_posed_eg3d/deca_results_unposed
+real_img_path: /datawaha/cggroup/parawr/Projects/diffusion/all_data/ffhq_512_posed_eg3d
+real_mesh_path: /datawaha/cggroup/parawr/Projects/diffusion/all_data/ffhq_512_posed_eg3d/deca_results_unposed
+# When used with slurm, this will take the dataset from `path_for_slurm_job`
+# and will copy it into the `path` location
+path_for_slurm_job: ${env.datasets_dir}/${dataset.name}
+
+idxes: [0, 140000]
+
+type: a_data
+composer:
+  all_retain_prob: 0.1  # probability of retaining all attributes and RGB
+  attr_dropout: 0.8 # probability of dropping an attribute
+  attr_retain_prob: 0.8 # probability of retaining all attributes
+  seg_retain_prob: 0.8 # probability of retaining the segmentation condition
+  rgb_retain_prob: 0.8 # probability of retaining the RGB condition
+  mask_types_rgb: [brush, class]
+  mask_types_seg: [brush, class]
+  min_num_vertex: 5
+  max_num_vertex: 18
+  mean_angle: 1.256 # 72 degrees
+  angle_range: 0.785  # 45 degrees 
+  min_width: 12
+  max_width: 48
+  average_radius: 0
+  hole_range: [0,1]
+  n_classes: 19
+  max_tries_brush: 15
+  max_tries_class: 3
+  drop_seg: False
+  drop_rgb: False

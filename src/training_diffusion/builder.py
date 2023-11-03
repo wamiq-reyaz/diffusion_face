@@ -54,7 +54,9 @@ class ModelBuilder:
         if hasattr(cfg.dataset, 'mode'):
             test_cfg = deepcopy(cfg)
             test_cfg.dataset.mode = 'test'
-            test_cfg.dataset.idxes = [140000, 140000+1024]
+            # TODO: assume that the idxes are sorted
+            last_idx = cfg.dataset.idxes[-1]
+            test_cfg.dataset.idxes = [last_idx, last_idx+1024]
         self.test_dataset = create_dataset(test_cfg)
         self.test_dataset = Subset(self.test_dataset, range(1024))
 

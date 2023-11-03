@@ -131,6 +131,28 @@ def random_mask(s, hole_range=[0,1]):
         if hole_range is not None and (hole_ratio <= hole_range[0] or hole_ratio >= hole_range[1]):
             continue
         return mask[np.newaxis, ...].astype(np.float32)
+    
+IDX_TO_CAT_IDX = {
+                    0: [0], # background
+                    1: [1], # neck
+                    2: [2], # face
+                    3: [3], # cloth
+                    4: [4, 5], # rr
+                    5: [4, 5], # lr
+                    6: [6, 7], # rb
+                    7: [6, 7], # lb
+                    8: [8, 9], # re
+                    9: [8, 9], # le
+                    10: [10], # nose
+                    11: [11], # imouth
+                    12: [12, 13], # llip
+                    13: [12, 13], # ulip
+                    14: [14], # hair
+                    15: [15], # eyeg
+                    16: [16], # hat
+                    17: [17], # earr
+                    18: [18], # neck_l
+                }
 
 def mask_category(max_tries, n_classes, img):
     ''' max_tries: maximum number of tries to generate a mask
@@ -140,10 +162,13 @@ def mask_category(max_tries, n_classes, img):
     base_mask = np.ones_like(img)
     tries = np.random.randint(max_tries)
     for _ in range(tries):
-        idx = np.random.randint(n_classes) / float(n_classes)
-        mask = np.where(np.abs(img - idx) < 0.01, 0, 1)
-        base_mask = np.logical_and(base_mask, mask)
-        
+        idx = np.random.randint(n_classes)
+        idx_iter = IDX_TO_CAT_IDX[idx]
+        for _idx in idx_iter:
+            _idx = _idx / float(n_classes)
+            mask = np.where(np.abs(img - _idx) < 0.01, 0, 1)
+            base_mask = np.logical_and(base_mask, mask)
+                    
     return base_mask.astype(np.float32)
 
 def compute_idxes(idxes_list):

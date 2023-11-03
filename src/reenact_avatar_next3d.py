@@ -167,13 +167,19 @@ def run_video_animation(drive_root, fname, network_pkl, grid_dims, seeds, outdir
             G.rendering_kwargs['depth_resolution_importance'] = 48
             G.rendering_kwargs['depth_resolution'] = 48
             
-            replacement = torch.load('/storage/nfs/wamiq/next3d/notebooks/000_simple_train_inversion4.pt')
-            stats = torch.load('./data/generated_samples/w_plus/stats/stats.pt')
+            # replacement = torch.load('/storage/nfs/wamiq/next3d/notebooks/000_simple_train_inversion4.pt')
+            # stats = torch.load('./data/generated_samples/w_plus/stats/stats.pt')
+            # _min = stats['min'].cuda()
+            # _max = stats['max'].cuda()
+            # _range = _max - _min
+            # replacement = replacement[idx, :, 7:].permute(1,0).cuda()
+            replacement = torch.load('/datawaha/cggroup/parawr/Projects/diff2/notebooks/ddim_29.pt').squeeze().cuda()
+            # print(replacement.shape)
+            stats = torch.load('/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_img_cams_ids_0.7_150k_frontal_final/stats.pt')
             _min = stats['min'].cuda()
-            _max = stats['max'].cuda()
-            _range = _max - _min
-            replacement = replacement[idx, :, 7:].permute(1,0).cuda()
-
+            _range = stats['range'].cuda()
+            # replacement = replacement[:, 23:].permute(1,0).cuda()
+            replacement = replacement.permute(1,0).cuda()
             replacement = (replacement * _range) + _min
 
             all_hooks = set_replacement_hook(G, WS, replacement)

@@ -1,5 +1,5 @@
 name: uvit
-extras: 256 # the image features
+extras: 277 # the image features + extras
 len_latents: 73 # the length of the latents
 embed_dim: 512
 depth: 12

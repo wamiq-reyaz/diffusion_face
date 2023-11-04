@@ -139,3 +139,20 @@ training=embedder
 training.total_iter=200000 \
 training.per_gpu_batch_size=96 
 ```
+
+```bash
+CUDA_VISIBLE_DEVICES=1,2,3 python src/infra/launch.py env=local slurm=False training.resume=False \
+dataset=partial_2m_attr \
+experiment_name=rgb_seg_conditional_seq_v_uvit_frontal2m_200k_mlp_embedder_attr+seg+rgb_0.8_final_faster \
+model=uvit \
+diffusion.auto_normalize=True \
+dataset.normalize_w=True \
+dataset.w_norm_type=min_max \
+dataset.z_scaler=7.0 \
+dataset.padding=[0,0] \
+diffusion.objective=pred_v \
+num_gpus=4 \
+training.val_freq=5000 \
+conditioner=deeplab_seg \
+training=embedder
+```

@@ -1,3 +1,10 @@
+import os
+from os.path import relpath, abspath
+from copy import deepcopy
+from torch.utils.data import ConcatDataset
+from hydra import compose, initialize
+from omegaconf import OmegaConf
+
 from .latent import WData
 from .attrs import AData
 
@@ -15,9 +22,30 @@ def create_dataset(cfg):
             w_norm_type=cfg.dataset.w_norm_type,
             z_scaler=cfg.dataset.z_scaler
         )
-    elif cfg.dataset.type == 'a_data':
+    elif (cfg.dataset.type == 'a_data') or ((cfg.dataset.type == 'a_data_extended') and (cfg.dataset.mode == 'test')):
         dataset = AData(
             cfg=cfg,
         )
-
+    elif cfg.dataset.type == 'a_data_extended':
+        # save the orig config
+        orig_config = deepcopy(cfg)
+        base_dataset = AData(
+            cfg=cfg,
+        )
+        
+        # We also have to ensure that the the last index is updated
+        additional_datasets = []
+        for d in cfg.dataset.additional_datasets:
+            _curr_cfg = deepcopy(cfg)
+            # load the additional dataset config
+            with initialize(config_path=relpath(abspath('../../../configs'), os.getcwd()), version_base='1.2'):
+                _new_config = compose('config.yaml', overrides=[f'dataset={d}'])
+                OmegaConf.set_struct(_new_config, True)
+            _curr_cfg.dataset = _new_config.dataset
+            # overwrite the composer params from the original config
+            _curr_cfg.dataset.composer = orig_config.dataset.composer
+            additional_datasets.append(AData(cfg=_curr_cfg))
+            
+        dataset = ConcatDataset([base_dataset] + additional_datasets)
+        
     return dataset

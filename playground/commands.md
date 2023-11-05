@@ -156,3 +156,19 @@ training.val_freq=5000 \
 conditioner=deeplab_seg \
 training=embedder
 ```
+```bash
+python src/infra/launch.py env=raven slurm=True training.resume=False \
+dataset=partial_2m_attr_ex \
+experiment_name=rgb_seg_conditional_seq_v_unet6m_500k_mlp_embedder_attr+seg+rgb_0.8 \
+model=base \
+diffusion.auto_normalize=True \
+dataset.normalize_w=True \
+dataset.w_norm_type=min_max \
+dataset.z_scaler=7.0 \
+"dataset.padding=[0,0]" \
+diffusion.objective=pred_v \
+num_gpus=4 \
+training.val_freq=5000 \
+conditioner=deeplab_seg \
+training=embedder
+```

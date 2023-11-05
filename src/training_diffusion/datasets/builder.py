@@ -37,9 +37,19 @@ def create_dataset(cfg):
         additional_datasets = []
         for d in cfg.dataset.additional_datasets:
             _curr_cfg = deepcopy(cfg)
+            _cfg_d = cfg.dataset
             # load the additional dataset config
             with initialize(config_path=relpath(abspath('../../../configs'), os.getcwd()), version_base='1.2'):
-                _new_config = compose('config.yaml', overrides=[f'dataset={d}'])
+                _new_config = compose('config.yaml', 
+                                    overrides=[
+                                            f'env={cfg.env.name}',
+                                        
+                                            f'dataset={d}',
+                                            f'dataset.normalize_w={_cfg_d.normalize_w}',
+                                            f'dataset.w_norm_type={_cfg_d.w_norm_type}',
+                                            f'dataset.z_scaler={_cfg_d.z_scaler}',
+                                            f'dataset.padding={_cfg_d.padding}',
+                                            ])
                 OmegaConf.set_struct(_new_config, True)
             _curr_cfg.dataset = _new_config.dataset
             # overwrite the composer params from the original config

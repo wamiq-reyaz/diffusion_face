@@ -57,6 +57,10 @@ class AData(Dataset):
         self.drop_seg = cfg_c.drop_seg # boolean, whether to drop the segmentation condition
         self.drop_rgb = cfg_c.drop_rgb # boolean, whether to drop the RGB condition
         
+        self.jitter_prob = cfg_c.jitter_prob
+        self.jitter_max = cfg_c.jitter_max
+        self.jitter_rot_max = cfg_c.jitter_rot_max
+        
         # ----------------------------
         # Padding and image size
         # ----------------------------
@@ -133,6 +137,18 @@ class AData(Dataset):
             self.image_size,
             resample=Image.Resampling.NEAREST
         )
+        # perform jittering and rotation on the segmentation only
+        if torch.rand(1).item() < self.jitter_prob:
+            jitter = torch.randint(-self.jitter_max, self.jitter_max, (2,))
+            seg_pil = seg_pil.transform(
+                seg_pil.size,
+                Image.AFFINE,
+                (1, 0, jitter[0], 0, 1, jitter[1]),
+                Image.NEAREST
+            )
+            jitter_rot = torch.randint(-self.jitter_rot_max, self.jitter_rot_max, (1,))
+            seg_pil = seg_pil.rotate(jitter_rot)
+        
         seg = np.asarray(seg_pil).astype(np.float32) / self.n_classes # HxW 
         seg = torch.from_numpy(seg).unsqueeze(0) # 1xHxW
         

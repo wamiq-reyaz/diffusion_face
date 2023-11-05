@@ -19,7 +19,7 @@ run_profiling: false
 
 sbatch_args:
   # constraint: ${env.slurm_constraint}
-  time: "02-00:00:00"
+  time: "14-00:00:00"
   gres: gpu:v100:${num_gpus}
   mem:
     _target_: src.infra.utils.num_gpus_to_mem

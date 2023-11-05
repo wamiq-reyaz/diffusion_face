@@ -15,3 +15,4 @@ before_train_commands:
 datasets_dir: /ibex/project/c2241/data/diffusion/
 results_dir: /ibex/ai/home/parawr/Projects/diffusion/experiments
 slurm_constraint: a100
+name: raven

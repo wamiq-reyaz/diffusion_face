@@ -14,10 +14,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--indir', type=str, required=True)
 args = parser.parse_args()
 
-# # run mtcnn needed for Deep3DFaceRecon
-# command = "python batch_mtcnn.py --in_root " + args.indir
-# print(command)
-# os.system(command)
+# run mtcnn needed for Deep3DFaceRecon
+command = "python batch_mtcnn.py --in_root " + args.indir
+print(command)
+os.system(command)
 
 out_folder = args.indir.split("/")[-2] if args.indir.endswith("/") else args.indir.split("/")[-1]
 
@@ -44,15 +44,16 @@ print(command)
 os.system(command)
 
 # estimate gaze direction
-os.chdir('faceverse')
-command = f"python fit_imgs_offline_cuda.py --input {os.path.join(args.indir, 'crop')} --res_folder {os.path.join(args.indir, 'gaze_results')}"
-print(command)
-os.system(command)
-os.chdir('..')
+# os.chdir('faceverse')
+# command = f"python fit_imgs_offline_cuda.py --input {os.path.join(args.indir, 'crop')} --res_folder {os.path.join(args.indir, 'gaze_results')}"
+# print(command)
+# os.system(command)
+# os.chdir('..')
 
 # estimate FLAME parameters by DECA
 os.chdir('deca')
-command = f"python demo_reconstruct.py -i {os.path.join(args.indir, 'crop')} -s {os.path.join(args.indir, 'deca_results')} --saveObj 1 --saveKpt 1 --load_eye_pose 1 --eyepath {os.path.join(args.indir, 'gaze_results/param')} --rasterizer_type pytorch3d"
+# command = f"python demo_reconstruct.py -i {os.path.join(args.indir, 'crop')} -s {os.path.join(args.indir, 'deca_results')} --saveObj 1 --saveKpt 1 --load_eye_pose 1 --eyepath {os.path.join(args.indir, 'gaze_results/param')} --rasterizer_type pytorch3d"
+command = f"python demo_reconstruct.py -i {os.path.join(args.indir, 'crop')} -s {os.path.join(args.indir, 'deca_results')} --saveObj 1 --saveKpt 1 --rasterizer_type pytorch3d"
 print(command)
 os.system(command)
 os.chdir('..')

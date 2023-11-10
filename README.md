@@ -22,6 +22,8 @@ The main functionality so far is:
 
 The faceverse environment uses Jittor. Which does JIT compiling - we used CUDA 11.6.2. Download everything with mamba using the `nvidia/proper_cuda_variant/` channel - cuda-nvcc, cudart-dev, cublas-dev, cunpp and a host of other files - check the env file. Then use the GCC version from the `module load command`, we used `11.1.0`. And use `nvcc_path = $(which nvcc)` from an activated conda environment
 
+bfm from `https://github.com/jadewu/3D-Human-Face-Reconstruction-with-3DMM-face-model-from-RGB-image/blob/main/BFM/01_MorphableModel.mat`
+
 ## DECA processing
 
 `python demo_reconstruct.py -i  /ibex/ai/home/parawr/Projects/diffusion/data/ffhq_512_posed_eg3d -s /ibex/ai/home/parawr/Projects/diffusion/data/ffhq_512_posed_eg3d/deca_results_unposed --saveObj 1 --saveKpt 1 --saveCoeff 1 --load_eye_pose 1 --eyepath /ibex/ai/home/parawr/Projects/diffusion/data/ffhq_512_posed_eg3d/gaze_results/param --rasterizer_type pytorch3d`

@@ -22,7 +22,7 @@ from tqdm import tqdm
 import argparse
 import torch
 import sys
-sys.path.append('../..')
+sys.path.append('../../src')
 from camera_utils import create_cam2world_matrix
 
 COMPRESS_LEVEL=0

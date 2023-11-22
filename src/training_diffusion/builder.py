@@ -46,7 +46,8 @@ class ModelBuilder:
                                                         sampler=sampler,
                                                         pin_memory=True,
                                                         shuffle=False,
-                                                        drop_last=True)
+                                                        drop_last=True,
+                                                        prefetch_factor=5)
         # Make infinite. WARNING: shuffle is performed only once
         # self.train_loader = cycle(self.train_loader)
 

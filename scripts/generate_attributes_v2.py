@@ -199,8 +199,8 @@ if __name__ == '__main__':
     
     d = WData(
         cfg=None,
-        w_path='/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_cams_ids_0.7_frontal_demo_seed42/samples',
-        img_path='/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_cams_ids_0.7_frontal_demo_seed42/images',
+        w_path='/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_paper_42/samples',
+        img_path='/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_paper_42/images',
         stats_path='/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_img_cams_ids_0.7_150k_frontal_final/stats.pt',
         padding=[0, 0],
         image_size=512,
@@ -269,7 +269,7 @@ if __name__ == '__main__':
                         {
                             'seg_map': retval['seg_map'].clone().detach().cpu().numpy(),
                             'attrs': retval['attrs'].clone().detach().cpu().numpy(),
-                            'dir': '/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_cams_ids_0.7_frontal_demo_seed42',
+                            'dir': '/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_paper_42',
                             'idx': local_idx.clone().detach().cpu().numpy()
                         }
                     )

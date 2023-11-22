@@ -24,8 +24,8 @@ ema_update_after_step: 0
 # gradient accumulation
 gradient_accumulation_steps: 1
 
-# stylegan_path: /datawaha/cggroup/parawr/Projects/diff2/pretrained_models/next3d_ffhq_512.pkl
-stylegan_path: /home/parawr/Projects/Next3D/pretrained_models/next3d_ffhq_512.pkl
+stylegan_path: /datawaha/cggroup/parawr/Projects/diff2/pretrained_models/next3d_ffhq_512.pkl
+# stylegan_path: /home/parawr/Projects/Next3D/pretrained_models/next3d_ffhq_512.pkl
 
 # Misc settings.
 desc: null # String to include in result dir name
@@ -38,5 +38,5 @@ snap: 5000 # How often to save snapshots
 image_snap: 5000 # How often to save samples?
 seed: 0 # Random seed
 nobench: false # Disable cuDNN benchmarking
-workers: 8 # DataLoader worker processes
+workers: 13 # DataLoader worker processes
 dry_run: false # Print training options and exit

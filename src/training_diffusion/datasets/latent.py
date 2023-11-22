@@ -65,7 +65,7 @@ class WData(Dataset):
         # for s,e in zip(starts, ends):
             # self.idxes += list(range(s,e))
 
-        self.idxes = list(range(1024))
+        self.idxes = list(range(4096))
 
 
     def __len__(self):

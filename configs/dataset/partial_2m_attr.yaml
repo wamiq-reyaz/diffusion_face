@@ -29,7 +29,7 @@ path_for_slurm_job: ${env.datasets_dir}/${dataset.name}
 
 idxes: [0, 1900000]
 
-type: a_data
+type: a_data2
 composer:
   all_retain_prob: 0.1  # probability of retaining all attributes and RGB
   attr_dropout: 0.8 # probability of dropping an attribute
@@ -51,3 +51,8 @@ composer:
   max_tries_class: 3
   drop_seg: False
   drop_rgb: False
+  drop_rgb_prob: 0.2
+  drop_seg_prob: 0.2
+  jitter_prob: 0.0
+  jitter_max: 5
+  jitter_rot_max: 5

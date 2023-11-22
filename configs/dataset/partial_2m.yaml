@@ -1,4 +1,4 @@
-name: w_plus_img_cams_ids_0.7_2m_final
+[name: w_plus_img_cams_ids_0.7_2m_final
 path: ${env.datasets_dir}/${dataset.name}
 w_path: /datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_img_cams_ids_0.7_2m_final/samples
 img_path: /datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_img_cams_ids_0.7_2m_final/images

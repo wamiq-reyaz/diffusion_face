@@ -47,7 +47,7 @@ python save_samples_next3d.py --outdir=out --trunc=0.7 --shapes=False --seeds=16
 --obj_path=../data/demo/demo.obj    \
 --lms_path=../data/demo/demo_kpt2d.txt \
 --lms_cond=True --reload_modules=False \
---outdir=/ibex/project/c2241/data/diffusion/w_plus_img_cams_ids_0.7_2m_largefov_largestd_final \
+--outdir=/datawaha/cggroup/parawr/Projects/diffusion/data/gen_images/w_plus_paper \
 --scale_lms=False \
 --num_gpus 4 \
 --num_writers 16 \
@@ -56,7 +56,7 @@ python save_samples_next3d.py --outdir=out --trunc=0.7 --shapes=False --seeds=16
 --sample_ids True \
 --dataset_path /ibex/ai/home/parawr/Projects/diffusion/data/ffhq_512_posed_eg3d \
 --mesh_path /ibex/ai/home/parawr/Projects/diffusion/data/ffhq_512_posed_eg3d/deca_results_unposed \
---num_samples 1999872 \
+--num_samples 4096 \
 --horizontal_stddev 0.15 \
 --vertical_stddev 0.15 \
 --lmdb True

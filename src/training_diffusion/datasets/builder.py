@@ -7,6 +7,7 @@ from omegaconf import OmegaConf
 
 from .latent import WData
 from .attrs import AData
+from .attrs2 import AData as AData2
 
 def create_dataset(cfg):
     if cfg.dataset.type == 'w_data':
@@ -24,6 +25,10 @@ def create_dataset(cfg):
         )
     elif (cfg.dataset.type == 'a_data') or ((cfg.dataset.type == 'a_data_extended') and (cfg.dataset.mode == 'test')):
         dataset = AData(
+            cfg=cfg,
+        )
+    elif (cfg.dataset.type == 'a_data2') or ((cfg.dataset.type == 'a_data_extended') and (cfg.dataset.mode == 'test')):
+        dataset = AData2(
             cfg=cfg,
         )
     elif cfg.dataset.type == 'a_data_extended':
